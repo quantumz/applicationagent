@@ -1,0 +1,24 @@
+{
+  "_comment": "Global scraper config: rate limits, browser, and hard dealbreaker exclusions. Search queries live in resumes/<type>/<type>_search_criteria.json",
+  "exclude_keywords": [
+    "Clearance Required",
+    "Secret Clearance",
+    "Top Secret",
+    "Relocation Required"
+  ],
+  "rate_limiting": {
+    "min_delay_seconds": 3,
+    "max_delay_seconds": 8,
+    "request_delay_seconds": 2,
+    "max_jobs_per_run": 50,
+    "max_jobs_per_query": 20
+  },
+  "browser_config": {
+    "headless": false,
+    "user_agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+    "viewport": {
+      "width": 1920,
+      "height": 1080
+    }
+  }
+}

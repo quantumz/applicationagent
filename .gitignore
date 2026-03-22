@@ -1,0 +1,59 @@
+# Environment
+.env
+venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+
+# Data - never commit
+data/
+*.json
+!scraper_config.json
+!tests/fixtures/*.json
+
+# Output - never commit
+output/
+logs/
+*.xlsx
+*.pdf
+
+# Job deduplication cache
+scrapers/jobs_seen.txt
+
+# User scraper plugins — local only, never commit
+scrapers/plugins/*.py
+!scrapers/plugins/README.md
+
+# Resumes - don't commit personal data
+resumes/**/*.txt
+resumes/**/*.pdf
+resumes/*
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+*.swp
+
+# Test artifacts
+.coverage
+tests/output/pdf* 
+
+# Backup files
+*.tar.gz
+*.bak
+*.old
+applicatagent.*/
+applicationagent_backup*/
+
+# Work Directory - notes and scripts
+work/*
+
+#Claude
+CLAUDE.md
+# Internal workflow notes — never publish
+CLAUDE.md
+.pytest_cache/

@@ -1,0 +1,37 @@
+ALEX MORGAN
+Portland, OR | alex@example.com | linkedin.com/in/alexmorgan
+
+SUMMARY
+Senior DevOps/SRE engineer with 15+ years of experience building and operating
+large-scale distributed systems. Expert in Kubernetes, Terraform, AWS, and CI/CD
+automation. Proven track record leading platform teams and driving reliability
+initiatives across cloud-native environments.
+
+EXPERIENCE
+
+Senior Site Reliability Engineer — Acme Corp (2018–present)
+- Architected multi-region Kubernetes clusters serving 500M+ requests/day
+- Reduced MTTR by 60% by implementing distributed tracing (Jaeger, OpenTelemetry)
+- Led migration from on-prem to AWS; saved $2M/year in infrastructure costs
+- Built GitOps pipelines (ArgoCD, Flux) for 40+ microservices
+
+Staff DevOps Engineer — WidgetCo (2014–2018)
+- Designed Terraform modules for repeatable infrastructure provisioning on AWS and GCP
+- Implemented SLO/SLI framework using Prometheus and Grafana; achieved 99.95% uptime
+- Created automated incident response runbooks, reducing on-call load by 40%
+
+DevOps Engineer — StartupXYZ (2010–2014)
+- Built CI/CD pipelines with Jenkins, later migrated to GitHub Actions
+- Managed Linux servers (Ubuntu, RHEL) for production and staging environments
+
+SKILLS
+Cloud: AWS (EKS, EC2, RDS, S3, Lambda, CloudWatch), GCP, Azure
+Container/Orchestration: Kubernetes, Docker, Helm, Kustomize
+IaC: Terraform, Ansible, CloudFormation, Pulumi
+CI/CD: GitHub Actions, ArgoCD, Flux, Jenkins, GitLab CI
+Observability: Prometheus, Grafana, Datadog, Jaeger, OpenTelemetry, PagerDuty
+Languages: Python, Bash, Go (proficient)
+Other: Linux, PostgreSQL, Redis, Kafka, Vault, Consul
+
+EDUCATION
+B.S. Computer Science — Oregon State University

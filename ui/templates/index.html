@@ -1,0 +1,328 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ApplicationAgent</title>
+    <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+    <div id="app">
+        <header>
+            <div class="header-left">
+                <button class="sidebar-toggle" onclick="toggleSidebar()" title="Toggle sidebar">☰</button>
+                <div>
+                    <h1>ApplicationAgent</h1>
+                    <p class="subtitle">Job screening tool — don't waste time on auto-rejects</p>
+                </div>
+            </div>
+            <div class="header-right">
+                <a href="/docs/getting-started.md" target="_blank">Docs</a>
+                <button class="settings-btn" onclick="openSettingsModal()" title="API Key Settings">⚙ Settings</button>
+            </div>
+        </header>
+
+        <div class="app-body">
+            <!-- Sidebar -->
+            <nav class="sidebar" id="sidebar">
+                <div class="sidebar-section">
+                    <div class="sidebar-section-header">
+                        <span class="sidebar-icon">📄</span>
+                        <span class="sidebar-label">Resumes</span>
+                    </div>
+                    <div id="sidebar-resumes"></div>
+                    <div class="sidebar-item sidebar-add" onclick="openUploadModal()">
+                        <span class="sidebar-icon">+</span>
+                        <span class="sidebar-name">Add New</span>
+                    </div>
+                </div>
+
+                <div class="sidebar-section">
+                    <div class="sidebar-section-header">
+                        <span class="sidebar-icon">📊</span>
+                        <span class="sidebar-label">Filter</span>
+                    </div>
+                    <div class="sidebar-item filter-item active" data-decision="all" onclick="applyFilter(null)">
+                        <span class="sidebar-icon">▸</span>
+                        <span class="sidebar-name">All</span>
+                    </div>
+                    <div class="sidebar-item filter-item" data-decision="STRONG_MATCH" onclick="applyFilter('STRONG_MATCH')">
+                        <span class="sidebar-icon">▸</span>
+                        <span class="sidebar-name">Strong</span>
+                    </div>
+                    <div class="sidebar-item filter-item" data-decision="APPLY" onclick="applyFilter('APPLY')">
+                        <span class="sidebar-icon">▸</span>
+                        <span class="sidebar-name">Apply</span>
+                    </div>
+                    <div class="sidebar-item filter-item" data-decision="MAYBE" onclick="applyFilter('MAYBE')">
+                        <span class="sidebar-icon">▸</span>
+                        <span class="sidebar-name">Maybe</span>
+                    </div>
+                    <div class="sidebar-item filter-item" data-decision="ATS_ONLY" onclick="applyFilter('ATS_ONLY')">
+                        <span class="sidebar-icon">▸</span>
+                        <span class="sidebar-name">ATS Only</span>
+                    </div>
+                    <div class="sidebar-item filter-item" data-decision="CONSIDER" onclick="applyFilter('CONSIDER')">
+                        <span class="sidebar-icon">▸</span>
+                        <span class="sidebar-name">Consider</span>
+                    </div>
+                    <div class="sidebar-item filter-item" data-decision="SKIP" onclick="applyFilter('SKIP')">
+                        <span class="sidebar-icon">▸</span>
+                        <span class="sidebar-name">Skip</span>
+                    </div>
+                </div>
+
+                <div class="sidebar-section" id="sidebar-query-section">
+                    <div class="sidebar-section-header">
+                        <span class="sidebar-icon">🔍</span>
+                        <span class="sidebar-label">Query</span>
+                    </div>
+                    <div id="sidebar-queries">
+                        <div class="sidebar-item muted" style="font-size:11px">Select a resume</div>
+                    </div>
+                </div>
+            </nav>
+
+            <!-- Main content -->
+            <main>
+                <!-- Results view (default) -->
+                <div id="results-view">
+                    <!-- Controls -->
+                    <section id="run-section">
+                        <h2>Run Analysis</h2>
+                        <div class="control-row">
+                            <select id="resume-select" onchange="onResumeChange()">
+                                <option value="">Loading resumes...</option>
+                            </select>
+                            <button id="run-btn" onclick="openRunModal()">Run</button>
+                            <button onclick="openAnalyzeModal()">Analyze Job</button>
+                            <span id="status-msg"></span>
+                        </div>
+                        <div id="progress" class="hidden">
+                            <pre id="log-output"></pre>
+                        </div>
+                    </section>
+
+                    <!-- Results -->
+                    <section id="results-section">
+                        <h2>Results <span id="results-count"></span></h2>
+                        <div id="results-table-container">
+                            <p class="muted">No results yet. Run the pipeline or check data/ directory.</p>
+                        </div>
+                    </section>
+                </div>
+
+                <!-- Resume detail view (hidden by default) -->
+                <div id="resume-detail-view" class="hidden"></div>
+            </main>
+        </div>
+
+        <!-- ── Modals ──────────────────────────────────────────────────── -->
+
+        <!-- Run Modal -->
+        <div id="run-modal" class="modal-overlay hidden">
+            <div class="modal">
+                <button class="modal-close" onclick="closeRunModal()">×</button>
+                <h2>Run Pipeline</h2>
+                <label>Resume
+                    <select id="run-resume-select"></select>
+                </label>
+                <div>
+                    <div class="field-label">Mode</div>
+                    <div class="radio-group">
+                        <label class="radio-label"><input type="radio" name="run-mode" value="full" checked onchange="onModeChange()"> Full Pipeline</label>
+                        <label class="radio-label"><input type="radio" name="run-mode" value="scrape" onchange="onModeChange()"> Scrape Only</label>
+                        <label class="radio-label"><input type="radio" name="run-mode" value="analyze" onchange="onModeChange()"> Analyze Only</label>
+                        <label class="radio-label"><input type="radio" name="run-mode" value="track" onchange="onModeChange()"> Track Only</label>
+                    </div>
+                </div>
+                <div id="scraper-row">
+                    <label>Scraper
+                        <select id="run-scraper-select"></select>
+                    </label>
+                </div>
+                <div id="data-file-row" class="hidden">
+                    <label>Data File
+                        <select id="run-data-file"></select>
+                    </label>
+                </div>
+                <label class="checkbox-label">
+                    <input type="checkbox" id="run-reset-cache"> Reset Cache
+                    <span class="field-hint">Clear dedup cache before scraping</span>
+                </label>
+                <div class="modal-actions">
+                    <button onclick="closeRunModal()">Cancel</button>
+                    <button onclick="submitRun()">Run</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Analyze Single Job Modal -->
+        <div id="analyze-modal" class="modal-overlay hidden">
+            <div class="modal modal-wide">
+                <button class="modal-close" onclick="closeAnalyzeModal()">×</button>
+                <h2>Analyze Job</h2>
+                <div id="screenshot-zone" class="screenshot-zone">
+                    <div class="screenshot-hint">
+                        <span class="icon">[ IMG ]</span>
+                        <span>Paste screenshot (Ctrl+V) or <label for="screenshot-input" class="upload-link">upload image</label></span>
+                    </div>
+                    <input type="file" id="screenshot-input" accept="image/*" style="display:none">
+                    <div id="screenshot-preview" style="display:none">
+                        <img id="screenshot-thumb" style="max-height:80px; border-radius:4px;">
+                        <span id="screenshot-status"></span>
+                        <button type="button" id="screenshot-clear" class="btn-clear">&#x2715;</button>
+                    </div>
+                </div>
+                <div class="form-row">
+                    <label>Job Title
+                        <input type="text" id="analyze-job-name" placeholder="Senior DevOps Engineer" />
+                    </label>
+                    <label>Company
+                        <input type="text" id="analyze-company" placeholder="Acme Corp" />
+                    </label>
+                </div>
+                <div class="form-row">
+                    <label>Resume
+                        <select id="analyze-resume-select"></select>
+                    </label>
+                    <label>Salary <span class="field-hint">(optional)</span>
+                        <input type="text" id="analyze-salary" placeholder="$120k–$150k" />
+                    </label>
+                </div>
+                <label>Job URL <span class="field-hint">(optional — makes company name a link)</span>
+                    <input type="text" id="analyze-url" placeholder="https://..." />
+                </label>
+                <label>Job Description
+                    <textarea id="analyze-job-desc" placeholder="Paste job description here..."></textarea>
+                </label>
+                <div class="modal-actions">
+                    <button onclick="closeAnalyzeModal()">Cancel</button>
+                    <button id="analyze-submit-btn" onclick="submitAnalyze()">Analyze</button>
+                </div>
+                <p id="analyze-error" class="upload-error hidden"></p>
+                <div id="analyze-result" class="hidden"></div>
+            </div>
+        </div>
+
+        <!-- Delete Job Confirm Modal -->
+        <div id="delete-modal" class="modal-overlay hidden">
+            <div class="modal modal-sm">
+                <button class="modal-close" onclick="closeDeleteModal()">×</button>
+                <h2>Delete Job</h2>
+                <p id="delete-confirm-text" class="delete-confirm-text"></p>
+                <p class="field-hint">Removes from database and PDF output.</p>
+                <div class="modal-actions">
+                    <button onclick="closeDeleteModal()">Cancel</button>
+                    <button class="btn-danger" onclick="confirmDelete()">Delete</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Delete Resume Confirm Modal -->
+        <div id="delete-resume-modal" class="modal-overlay hidden">
+            <div class="modal modal-sm">
+                <button class="modal-close" onclick="closeDeleteResumeModal()">×</button>
+                <h2>Delete Resume</h2>
+                <p class="delete-confirm-text">
+                    Delete "<span id="delete-resume-name"></span>" and
+                    <span id="delete-resume-count"></span> associated job(s)?
+                </p>
+                <p class="field-hint">This cannot be undone. Resume files and folder will be deleted.</p>
+                <input type="hidden" id="delete-resume-id">
+                <div class="modal-actions">
+                    <button onclick="closeDeleteResumeModal()">Cancel</button>
+                    <button class="btn-danger" onclick="confirmDeleteResumeAction()">Delete</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Edit Search Criteria Modal -->
+        <div id="criteria-modal" class="modal-overlay hidden">
+            <div class="modal modal-wide">
+                <button class="modal-close" onclick="closeCriteriaModal()">×</button>
+                <h2>Edit Search Criteria</h2>
+                <p class="field-hint">Edit the JSON directly. Keys: search_queries, exclude_keywords, location_preferences.</p>
+                <label>
+                    <textarea id="criteria-json" style="height:320px;font-size:12px;"></textarea>
+                </label>
+                <div class="modal-actions">
+                    <button onclick="closeCriteriaModal()">Cancel</button>
+                    <button onclick="saveCriteria()">Save</button>
+                </div>
+                <p id="criteria-error" class="upload-error hidden"></p>
+            </div>
+        </div>
+
+        <!-- Upload Resume Modal -->
+        <div id="upload-modal" class="modal-overlay hidden">
+            <div class="modal">
+                <button class="modal-close" onclick="closeUploadModal()">×</button>
+                <h2>Add Resume</h2>
+                <label>Resume Name
+                    <input type="text" id="upload-name" placeholder="my_resume" />
+                    <span class="field-hint">Letters, numbers, underscores only. Becomes the folder name.</span>
+                </label>
+                <label>Resume File (.txt or .pdf)
+                    <input type="file" id="upload-file" accept=".txt,.pdf" />
+                </label>
+                <div class="queries-header">
+                    <span>Search Queries</span>
+                    <button type="button" onclick="addQueryRow()">+</button>
+                </div>
+                <div id="query-rows"></div>
+
+                <div class="queries-header" style="margin-top:12px">
+                    <span>Exclude Keywords</span>
+                    <button type="button" onclick="addKeywordRow()">+</button>
+                </div>
+                <div class="field-hint" style="margin-bottom:6px">Any job containing these keywords will be excluded from results.</div>
+                <div id="keyword-rows"></div>
+
+                <div class="modal-actions">
+                    <button type="button" onclick="closeUploadModal()">Cancel</button>
+                    <button type="button" onclick="submitUpload()">Upload</button>
+                </div>
+                <p id="upload-error" class="upload-error hidden"></p>
+            </div>
+        </div>
+    </div>
+
+        <!-- API Key Setup Modal -->
+        <div id="settings-modal" class="modal-overlay hidden">
+            <div class="modal modal-sm">
+                <button class="modal-close" id="settings-modal-close" onclick="closeSettingsModal()">×</button>
+                <h2>ApplicationAgent Setup</h2>
+                <p class="field-hint">Enter your Anthropic API Key to enable AI analysis.</p>
+                <label>API Key
+                    <input type="password" id="settings-api-key" placeholder="sk-ant-..." autocomplete="off" />
+                </label>
+                <p class="field-hint">Get a key at <a href="https://console.anthropic.com" target="_blank">console.anthropic.com</a></p>
+                <div class="modal-actions">
+                    <button onclick="saveApiKey()">Save Key</button>
+                </div>
+                <p id="settings-error" class="upload-error hidden"></p>
+                <p class="field-hint" style="margin-top:12px">Your key is stored in <code>.env</code> on your local machine only. It is never transmitted anywhere except the Anthropic API.</p>
+            </div>
+        </div>
+
+        <!-- Low Score Warning Modal -->
+        <div id="low-score-modal" class="modal-overlay hidden">
+            <div class="modal modal-sm">
+                <button class="modal-close" onclick="closeLowScoreModal()">×</button>
+                <h2>⚠ Low Match Score</h2>
+                <p>This job scored <strong id="low-score-value"></strong> with incompatible requirements flagged.</p>
+                <p id="low-score-reasoning" class="field-hint"></p>
+                <p>Apply anyway?</p>
+                <div class="modal-actions">
+                    <button onclick="closeLowScoreModal()">No, go back</button>
+                    <button class="btn-danger" onclick="confirmLowScoreApply()">Yes, apply anyway</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="/static/sidebar.js"></script>
+    <script src="/static/app.js"></script>
+</body>
+</html>

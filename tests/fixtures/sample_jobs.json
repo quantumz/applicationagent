@@ -1,0 +1,37 @@
+{
+  "resume_type": "test_resume",
+  "source": "hybrid_scraper",
+  "scraped_at": "2026-03-09T10:00:00",
+  "jobs": [
+    {
+      "id": "job-001",
+      "title": "Senior Site Reliability Engineer",
+      "company": "TechCorp",
+      "location": "Portland, OR (Remote OK)",
+      "salary": "$150,000 - $180,000",
+      "url": "https://www.ziprecruiter.com/jobs/techcorp-sre-001",
+      "description": "We are looking for a Senior SRE to join our platform team. You will work with Kubernetes, Terraform, and AWS to build and operate our cloud infrastructure. 10+ years of experience required. Strong skills in Python, Prometheus, and Grafana expected. This is a remote-friendly role based in Portland, OR.",
+      "scraped_at": "2026-03-09T10:00:00"
+    },
+    {
+      "id": "job-002",
+      "title": "Junior DevOps Engineer",
+      "company": "BootstrapCo",
+      "location": "Austin, TX",
+      "salary": "$70,000 - $90,000",
+      "url": "https://www.ziprecruiter.com/jobs/bootstrapco-devops-002",
+      "description": "Entry-level DevOps position. 0-2 years experience. Will learn Docker and basic CI/CD tools. Relocation required.",
+      "scraped_at": "2026-03-09T10:00:00"
+    },
+    {
+      "id": "job-003",
+      "title": "Principal Platform Engineer",
+      "company": "MegaSaaS",
+      "location": "Remote",
+      "salary": "$200,000 - $240,000",
+      "url": "https://www.ziprecruiter.com/jobs/megasaas-platform-003",
+      "description": "Principal-level platform engineering role. Lead our Kubernetes platform across 3 regions. 15+ years experience with DevOps, SRE, and platform engineering. Security clearance preferred but not required.",
+      "scraped_at": "2026-03-09T10:00:00"
+    }
+  ]
+}
