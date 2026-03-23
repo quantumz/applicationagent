@@ -437,7 +437,6 @@ def extract_job_screenshot():
         return jsonify({'error': 'Image too large (10MB max)'}), 413
 
     from anthropic import Anthropic
-    load_dotenv(ENV_PATH)
     client = Anthropic(api_key=os.getenv('ANTHROPIC_API_KEY'))
 
     b64 = base64.standard_b64encode(image_data).decode('utf-8')
@@ -481,38 +480,30 @@ def extract_job_screenshot():
 # TODO: auth gate before network deployment
 @app.route('/api/settings/status')
 def settings_status():
-    api_key_configured = False
-    if ENV_PATH.exists():
-        for line in ENV_PATH.read_text().splitlines():
-            line = line.strip()
-            if line.startswith('ANTHROPIC_API_KEY='):
-                value = line.split('=', 1)[1].strip().strip('"\'')
-                api_key_configured = bool(value and not value.startswith('#'))
-                break
-    return jsonify({'api_key_configured': api_key_configured})
+    from core.keystore import is_key_configured
+    in_memory = bool(os.environ.get('ANTHROPIC_API_KEY', ''))
+    in_db = is_key_configured()
+    return jsonify({
+        'api_key_configured': in_memory,
+        'requires_reentry': in_db and not in_memory,
+    })
 
 
 # TODO: auth gate before network deployment
 @app.route('/api/settings/apikey', methods=['POST'])
 def settings_save_apikey():
-    data = request.json or {}
-    api_key = data.get('api_key', '').strip()
-    if not api_key.startswith('sk-ant-'):
-        return jsonify({'error': 'Invalid key format — must start with sk-ant-'}), 400
+    from core.keystore import set_key, mask_key
+    data = request.get_json()
+    api_key = (data or {}).get('api_key', '').strip()
 
-    # Read existing .env lines, replace or append ANTHROPIC_API_KEY
-    lines = ENV_PATH.read_text().splitlines() if ENV_PATH.exists() else []
-    found = False
-    for i, line in enumerate(lines):
-        if line.strip().startswith('ANTHROPIC_API_KEY'):
-            lines[i] = f'ANTHROPIC_API_KEY={api_key}'
-            found = True
-            break
-    if not found:
-        lines.append(f'ANTHROPIC_API_KEY={api_key}')
-    ENV_PATH.write_text('\n'.join(lines) + '\n')
-    os.environ['ANTHROPIC_API_KEY'] = api_key  # update live env — no restart needed
-    return jsonify({'success': True})
+    if not api_key:
+        return jsonify({'error': 'API key required'}), 400
+    if not api_key.startswith('sk-ant-'):
+        return jsonify({'error': 'Invalid API key format'}), 400
+
+    set_key(api_key)  # hashes to DB, sets os.environ
+    app.logger.info('[keystore] API key saved: %s', mask_key(api_key))
+    return jsonify({'status': 'ok'})
 
 
 @app.route('/output/pdf/<path:filename>')

@@ -36,6 +36,10 @@ async function checkApiKeySetup() {
     const data = await res.json();
     if (!data.api_key_configured) {
         document.getElementById('settings-modal-close').classList.add('hidden');
+        if (data.requires_reentry) {
+            const hint = document.getElementById('settings-reentry-hint');
+            if (hint) hint.classList.remove('hidden');
+        }
         openSettingsModal();
     }
 }
@@ -63,7 +67,7 @@ async function saveApiKey() {
         body: JSON.stringify({api_key: key})
     });
     const data = await res.json();
-    if (data.success) {
+    if (data.status === 'ok') {
         window.location.reload();
     } else {
         err.textContent = data.error || 'Failed to save key';

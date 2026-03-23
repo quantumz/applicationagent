@@ -32,10 +32,6 @@ def flask_server(tmp_path_factory):
     existing_pythonpath = env.get('PYTHONPATH', '')
     env['PYTHONPATH'] = f"{PROJECT_ROOT}:{existing_pythonpath}" if existing_pythonpath else str(PROJECT_ROOT)
 
-    # Create minimal .env with test API key from environment
-    api_key = os.getenv('ANTHROPIC_API_KEY', '')
-    (tmp / '.env').write_text(f'ANTHROPIC_API_KEY={api_key}\n')
-
     # Create required directories
     (tmp / 'data').mkdir()
     (tmp / 'output' / 'pdf').mkdir(parents=True)

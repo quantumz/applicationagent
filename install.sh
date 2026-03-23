@@ -157,7 +157,7 @@ print_ok "Runtime directories created"
 # ── .env setup ────────────────────────────────────────────────────────────────
 if [ ! -f "$INSTALL_DIR/.env" ]; then
     cp "$INSTALL_DIR/.env.sample" "$INSTALL_DIR/.env"
-    print_ok ".env created (your API key will be stored here)"
+    print_ok ".env created"
 else
     print_ok ".env already exists — not overwritten"
 fi
@@ -349,6 +349,26 @@ UIEOF
     print_ok "UI launcher: applicationagent-ui"
 fi
 
+# ── Optional: pre-configure API key during CLI install ────────────────────────
+if [ "$INSTALL_MODE" = "cli" ]; then
+    echo
+    read -rp "  Enter your Anthropic API key now (or press Enter to skip): " API_KEY_INPUT
+    if [[ "$API_KEY_INPUT" == sk-ant-* ]]; then
+        INSTALL_DIR="$INSTALL_DIR" ANTHROPIC_KEY_INPUT="$API_KEY_INPUT" \
+            "$VENV_DIR/bin/python" - << 'PYEOF'
+import os, sys
+sys.path.insert(0, os.environ['INSTALL_DIR'])
+from core.database import init_db
+from core.keystore import set_key
+init_db()
+set_key(os.environ['ANTHROPIC_KEY_INPUT'])
+print('  \u2713 API key configured')
+PYEOF
+    else
+        echo "  — Skipped. Enter your key when you first launch the app."
+    fi
+fi
+
 # ── Done ──────────────────────────────────────────────────────────────────────
 print_header "Installation Complete!"
 
@@ -400,8 +420,7 @@ else
     echo "    Then open: http://localhost:8080"
     echo
     echo "  Setup:"
-    echo "  1. Add your Anthropic API key to: $INSTALL_DIR/.env"
-    echo "     (edit the file and paste your key after ANTHROPIC_API_KEY=)"
+    echo "  1. Start the app and enter your Anthropic API key when prompted."
     echo "     Get a key at: https://console.anthropic.com"
     echo "  2. Add your resume to: $INSTALL_DIR/resumes/<name>/<name>.txt"
     echo "     See: $INSTALL_DIR/resumes/README.MD"

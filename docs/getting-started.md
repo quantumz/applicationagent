@@ -42,7 +42,11 @@ The first time you open the app, you'll see a prompt for your Anthropic API key.
 5. Copy the key — it starts with `sk-ant-...`
 6. Paste it into the ApplicationAgent prompt and click **Save**
 
-The key is stored locally on your machine. It is never sent anywhere except directly to Anthropic's API when you analyze a job.
+**Security:** Your key is stored as a secure hash — never as plaintext on your disk.
+You will need to re-enter your key each time the app restarts. This is intentional.
+
+**Note:** Running `bash install.sh --clean` wipes all data including your key.
+Re-enter it on next launch. A new key takes 30 seconds at console.anthropic.com.
 
 > **Cost:** Each job analysis costs roughly $0.003–$0.006. Analyzing 50 jobs costs about $0.25.
 

@@ -246,31 +246,79 @@ class TestSettingsStatus:
     def test_returns_status(self, client):
         rv = client.get('/api/settings/status')
         assert rv.status_code == 200
-        assert 'api_key_configured' in rv.get_json()
+        data = rv.get_json()
+        assert 'api_key_configured' in data
+        assert 'requires_reentry' in data
 
-    def test_no_env_file_means_not_configured(self, client):
-        # fixture sets ENV_PATH to tmp_path/.env which doesn't exist yet
+    def test_no_key_in_db_means_not_configured(self, client):
+        # Fresh DB has no key hash — both flags false
+        import os
+        os.environ.pop('ANTHROPIC_API_KEY', None)
         rv = client.get('/api/settings/status')
-        assert rv.get_json()['api_key_configured'] is False
+        data = rv.get_json()
+        assert data['api_key_configured'] is False
+        assert data['requires_reentry'] is False
+
+    def test_key_in_db_but_not_memory_means_requires_reentry(self, client):
+        import os
+        from core.keystore import set_key
+        set_key('sk-ant-test-key-reentry')
+        os.environ.pop('ANTHROPIC_API_KEY', None)
+        rv = client.get('/api/settings/status')
+        data = rv.get_json()
+        assert data['api_key_configured'] is False
+        assert data['requires_reentry'] is True
+
+    def test_key_in_memory_means_configured(self, client):
+        import os
+        from core.keystore import set_key
+        set_key('sk-ant-test-key-inmemory')
+        rv = client.get('/api/settings/status')
+        data = rv.get_json()
+        assert data['api_key_configured'] is True
+        assert data['requires_reentry'] is False
 
 
 # ── POST /api/settings/apikey ─────────────────────────────────────────────────
 
 class TestSettingsApiKey:
 
+    def test_missing_key_returns_400(self, client):
+        rv = client.post('/api/settings/apikey', json={})
+        assert rv.status_code == 400
+
     def test_invalid_key_format_returns_400(self, client):
         rv = client.post('/api/settings/apikey', json={'api_key': 'not-a-key'})
         assert rv.status_code == 400
 
-    def test_valid_key_saves(self, client, _app):
+    def test_valid_key_returns_ok(self, client):
         rv = client.post('/api/settings/apikey',
                          json={'api_key': 'sk-ant-test-key-1234567890'})
         assert rv.status_code == 200
-        assert rv.get_json()['success'] is True
+        assert rv.get_json()['status'] == 'ok'
+
+    def test_valid_key_sets_environ(self, client):
+        import os
+        rv = client.post('/api/settings/apikey',
+                         json={'api_key': 'sk-ant-test-key-environ'})
+        assert rv.status_code == 200
+        assert os.environ.get('ANTHROPIC_API_KEY') == 'sk-ant-test-key-environ'
+
+    def test_valid_key_stored_as_hash_in_db(self, client):
+        from core.keystore import is_key_configured, verify_key
+        rv = client.post('/api/settings/apikey',
+                         json={'api_key': 'sk-ant-test-key-hashcheck'})
+        assert rv.status_code == 200
+        assert is_key_configured()
+        assert verify_key('sk-ant-test-key-hashcheck')
+
+    def test_plaintext_key_not_written_to_env_file(self, client, _app):
         _, app_tmp = _app
+        client.post('/api/settings/apikey',
+                    json={'api_key': 'sk-ant-test-key-noplaintext'})
         env_path = app_tmp / '.env'
-        assert env_path.exists()
-        assert 'sk-ant-test-key-1234567890' in env_path.read_text()
+        if env_path.exists():
+            assert 'sk-ant-test-key-noplaintext' not in env_path.read_text()
 
 
 # ── POST /api/analyze-single ──────────────────────────────────────────────────

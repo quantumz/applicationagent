@@ -1,6 +1,7 @@
 # Core
 anthropic>=0.39.0
 python-dotenv>=1.0.0
+argon2-cffi>=21.3.0
 
 # Scraping
 playwright>=1.40.0

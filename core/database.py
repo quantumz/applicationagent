@@ -67,6 +67,12 @@ def init_db():
                 created_at TEXT DEFAULT CURRENT_TIMESTAMP,
                 updated_at TEXT DEFAULT CURRENT_TIMESTAMP
             );
+
+            CREATE TABLE IF NOT EXISTS settings (
+                key        TEXT PRIMARY KEY,
+                value      TEXT NOT NULL,
+                updated_at TEXT DEFAULT (datetime('now'))
+            );
         ''')
         # ALTER TABLE doesn't support IF NOT EXISTS — check first
         existing_cols = {row[1] for row in conn.execute('PRAGMA table_info(jobs)')}
