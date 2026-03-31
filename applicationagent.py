@@ -17,13 +17,15 @@ import json
 import sys
 from pathlib import Path
 
+import core.database as db
+from core.agent import analyze_job_fit
+from scripts.batch_analyzer import generate_pdf_report
+
 PROJECT_ROOT = Path(__file__).parent
 
 
 def reanalyze_jobs(resume_type, job_ids=None):
     """Re-analyze existing jobs from DB with current scoring logic. No scraping."""
-    import core.database as db
-    from core.agent import analyze_job_fit
 
     resume_path = PROJECT_ROOT / 'resumes' / resume_type / f'{resume_type}.txt'
     if not resume_path.exists():
@@ -76,7 +78,6 @@ def reanalyze_jobs(resume_type, job_ids=None):
                 'location': job.get('location', ''), 'salary': job.get('salary'),
                 'url': job.get('url', ''), 'scraped_at': job.get('scraped_at', ''),
             }
-            from scripts.batch_analyzer import generate_pdf_report
             generate_pdf_report(result, output_dir=str(PROJECT_ROOT / 'output' / 'pdf'))
             success_count += 1
         except Exception as e:

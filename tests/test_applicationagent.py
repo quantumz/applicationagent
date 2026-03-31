@@ -102,7 +102,7 @@ class TestReanalyzeJobs:
 
         with patch('core.database.get_all_jobs_for_resume', return_value=jobs), \
              patch('core.database.upsert_analysis') as mock_upsert, \
-             patch('core.agent.analyze_job_fit', side_effect=Exception('API failure')):
+             patch('applicationagent.analyze_job_fit', side_effect=Exception('API failure')):
             app_module.reanalyze_jobs('test_resume')  # must not raise
 
         mock_upsert.assert_not_called()
@@ -119,8 +119,8 @@ class TestReanalyzeJobs:
 
         with patch('core.database.get_all_jobs_for_resume', return_value=[fake_job()]), \
              patch('core.database.upsert_analysis'), \
-             patch('core.agent.analyze_job_fit', side_effect=fake_analyze), \
-             patch('scripts.batch_analyzer.generate_pdf_report'):
+             patch('applicationagent.analyze_job_fit', side_effect=fake_analyze), \
+             patch('applicationagent.generate_pdf_report'):
             app_module.reanalyze_jobs('test_resume')
 
         assert captured['loc'] == ['Portland', 'Remote']
@@ -147,8 +147,8 @@ class TestReanalyzeJobs:
 
         with patch('core.database.get_all_jobs_for_resume', return_value=jobs), \
              patch('core.database.upsert_analysis'), \
-             patch('core.agent.analyze_job_fit', return_value=fake_result()), \
-             patch('scripts.batch_analyzer.generate_pdf_report') as mock_pdf:
+             patch('applicationagent.analyze_job_fit', return_value=fake_result()), \
+             patch('applicationagent.generate_pdf_report') as mock_pdf:
             app_module.reanalyze_jobs('test_resume')
 
         assert mock_pdf.call_count == 2

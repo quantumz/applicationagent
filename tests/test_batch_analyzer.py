@@ -184,6 +184,54 @@ class TestPrintSummary:
         out = capsys.readouterr().out
         assert 'Apply to: 2 STRONG_MATCH + 0 APPLY = 2 jobs' in out
 
+    def test_ats_only_appears_in_output(self, capsys):
+        results = [self._result('ATS_ONLY', 0.55)]
+        print_summary(results)
+        out = capsys.readouterr().out
+        assert 'ATS_ONLY' in out
+        assert '0.55' in out
+
+    def test_consider_appears_in_output(self, capsys):
+        results = [self._result('CONSIDER', 0.60)]
+        print_summary(results)
+        out = capsys.readouterr().out
+        assert 'CONSIDER' in out
+        assert '0.60' in out
+
+    def test_ats_only_counted_in_skip_total(self, capsys):
+        results = [
+            self._result('STRONG_MATCH', 0.95),
+            self._result('ATS_ONLY', 0.55),
+            self._result('CONSIDER', 0.58),
+        ]
+        print_summary(results)
+        out = capsys.readouterr().out
+        assert 'Skip: 2 jobs' in out
+
+    def test_mixed_all_decision_types(self, capsys):
+        results = [
+            self._result('STRONG_MATCH', 0.95, url='https://ex.com/1'),
+            self._result('APPLY', 0.75, url='https://ex.com/2'),
+            self._result('MAYBE', 0.55, url='https://ex.com/3'),
+            self._result('ATS_ONLY', 0.50, url='https://ex.com/4'),
+            self._result('CONSIDER', 0.58, url='https://ex.com/5'),
+            self._result('SKIP', 0.20, url='https://ex.com/6'),
+        ]
+        print_summary(results)
+        out = capsys.readouterr().out
+        for decision in ('STRONG_MATCH', 'APPLY', 'MAYBE', 'ATS_ONLY', 'CONSIDER', 'SKIP'):
+            assert decision in out
+
+    def test_unknown_decision_does_not_crash(self, capsys):
+        """Results with unrecognised decision types are silently ignored."""
+        results = [
+            self._result('FUTURE_DECISION_TYPE', 0.70),
+            self._result('STRONG_MATCH', 0.90),
+        ]
+        print_summary(results)
+        out = capsys.readouterr().out
+        assert 'STRONG_MATCH' in out
+
 
 # ── analyze_batch ──────────────────────────────────────────────────────────────
 

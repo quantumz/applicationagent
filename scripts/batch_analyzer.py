@@ -291,10 +291,19 @@ def print_summary(results):
         'STRONG_MATCH': [r for r in results if r['decision'] == 'STRONG_MATCH'],
         'APPLY': [r for r in results if r['decision'] == 'APPLY'],
         'MAYBE': [r for r in results if r['decision'] == 'MAYBE'],
+        'ATS_ONLY': [r for r in results if r['decision'] == 'ATS_ONLY'],
+        'CONSIDER': [r for r in results if r['decision'] == 'CONSIDER'],
         'SKIP': [r for r in results if r['decision'] == 'SKIP'],
     }
 
-    icons = {'STRONG_MATCH': '🎯', 'APPLY': '✓', 'MAYBE': '⚠️ ', 'SKIP': '❌'}
+    icons = {
+        'STRONG_MATCH': '🎯',
+        'APPLY': '✓',
+        'MAYBE': '⚠️ ',
+        'ATS_ONLY': '🤖',
+        'CONSIDER': '🤔',
+        'SKIP': '❌',
+    }
 
     for decision, icon in icons.items():
         group = groups[decision]
@@ -307,7 +316,7 @@ def print_summary(results):
 
     strong = len(groups['STRONG_MATCH'])
     apply = len(groups['APPLY'])
-    skip = len(groups['MAYBE']) + len(groups['SKIP'])
+    skip = len(groups['MAYBE']) + len(groups['ATS_ONLY']) + len(groups['CONSIDER']) + len(groups['SKIP'])
     print(f"\n{'='*70}")
     print(f"Apply to: {strong} STRONG_MATCH + {apply} APPLY = {strong + apply} jobs")
     print(f"Skip: {skip} jobs")
