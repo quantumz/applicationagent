@@ -200,13 +200,8 @@ def analyze_batch(jobs_file, resume_path, output_dir=None):
     _idx = _stem.find(_marker)
     source = data.get('source') or (_stem[:_idx] if _idx > 0 else _stem.split('_')[0])
 
-    # Load location preferences from search criteria if available
-    location_preferences = None
-    criteria_path = PROJECT_ROOT / 'resumes' / resume_type / f'{resume_type}_search_criteria.json'
-    if criteria_path.exists():
-        with open(criteria_path) as f:
-            criteria = json.load(f)
-        location_preferences = criteria.get('location_preferences')
+    from core.resume import load_location_preferences
+    location_preferences = load_location_preferences(resume_type, PROJECT_ROOT)
 
     print(f"Jobs to analyze: {len(jobs)}")
     print(f"Resume: {resume_path}")

@@ -13,12 +13,12 @@ Usage:
 """
 
 import argparse
-import json
 import sys
 from pathlib import Path
 
 import core.database as db
 from core.agent import analyze_job_fit
+from core.resume import load_resume, load_location_preferences
 from scripts.batch_analyzer import generate_pdf_report
 
 PROJECT_ROOT = Path(__file__).parent
@@ -27,17 +27,12 @@ PROJECT_ROOT = Path(__file__).parent
 def reanalyze_jobs(resume_type, job_ids=None):
     """Re-analyze existing jobs from DB with current scoring logic. No scraping."""
 
-    resume_path = PROJECT_ROOT / 'resumes' / resume_type / f'{resume_type}.txt'
-    if not resume_path.exists():
-        print(f"ERROR: Resume not found at {resume_path}")
+    try:
+        resume_text = load_resume(resume_type, PROJECT_ROOT)
+    except FileNotFoundError as e:
+        print(f"ERROR: {e}")
         sys.exit(1)
-    resume_text = resume_path.read_text()
-
-    location_preferences = None
-    criteria_path = PROJECT_ROOT / 'resumes' / resume_type / f'{resume_type}_search_criteria.json'
-    if criteria_path.exists():
-        criteria = json.loads(criteria_path.read_text())
-        location_preferences = criteria.get('location_preferences')
+    location_preferences = load_location_preferences(resume_type, PROJECT_ROOT)
 
     if job_ids:
         jobs = db.get_jobs_by_ids(job_ids)
