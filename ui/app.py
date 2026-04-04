@@ -282,16 +282,12 @@ def analyze_single():
     if not resume_type or not job_description:
         return jsonify({'error': 'resume_type and job_description required'}), 400
 
-    resume_path = PROJECT_ROOT / 'resumes' / resume_type / f'{resume_type}.txt'
-    if not resume_path.exists():
+    from core.resume import load_resume, load_location_preferences
+    try:
+        resume = load_resume(resume_type, PROJECT_ROOT)
+    except FileNotFoundError:
         return jsonify({'error': f'Resume not found: resumes/{resume_type}/{resume_type}.txt'}), 400
-
-    resume = resume_path.read_text()
-    location_preferences = None
-    criteria_path = PROJECT_ROOT / 'resumes' / resume_type / f'{resume_type}_search_criteria.json'
-    if criteria_path.exists():
-        criteria = json.loads(criteria_path.read_text())
-        location_preferences = criteria.get('location_preferences')
+    location_preferences = load_location_preferences(resume_type, PROJECT_ROOT)
 
     from core.agent import analyze_job_fit
     now = datetime.now().isoformat()
