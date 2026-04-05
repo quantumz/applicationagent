@@ -17,6 +17,8 @@ from pathlib import Path
 from unittest.mock import patch, MagicMock, PropertyMock
 import pytest
 
+pytestmark = pytest.mark.integration
+
 
 # ── GET / ─────────────────────────────────────────────────────────────────────
 

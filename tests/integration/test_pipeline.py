@@ -15,6 +15,8 @@ import pytest
 
 import core.database as db_module
 
+pytestmark = pytest.mark.integration
+
 FIXTURES_DIR = Path(__file__).parent.parent / 'fixtures'
 
 

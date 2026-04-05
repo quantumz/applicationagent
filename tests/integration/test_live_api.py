@@ -18,6 +18,8 @@ from unittest.mock import patch
 
 import pytest
 
+pytestmark = [pytest.mark.integration, pytest.mark.live]
+
 PROJECT_ROOT = Path(__file__).parent.parent.parent
 FIXTURES_DIR = Path(__file__).parent.parent / 'fixtures'
 RESULT_PATH  = PROJECT_ROOT / 'tests' / 'output' / 'live_api_result.json'
