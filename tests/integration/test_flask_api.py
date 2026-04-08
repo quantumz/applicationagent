@@ -674,3 +674,32 @@ class TestServeDocs:
         rv = client.get('/docs/notes.txt')
         assert rv.status_code == 200
         assert b'Documentation' in rv.data
+
+
+# ── POST /api/forward/<job_id> ────────────────────────────────────────────────
+
+class TestForwardToPipeorgan:
+
+    def test_forward_unknown_job_returns_404(self, client):
+        rv = client.post('/api/forward/99999')
+        assert rv.status_code == 404
+        assert rv.get_json()['error'] == 'job not found'
+
+    def test_forward_success_returns_forwarded(self, client):
+        job_id = client.job_ids[0]
+        mock_resp = MagicMock()
+        mock_resp.json.return_value = {'id': 'po-123', 'status': 'queued'}
+        mock_resp.raise_for_status.return_value = None
+        with patch('requests.post', return_value=mock_resp):
+            rv = client.post(f'/api/forward/{job_id}')
+        assert rv.status_code == 200
+        data = rv.get_json()
+        assert data['status'] == 'forwarded'
+        assert data['pipeorgan'] == {'id': 'po-123', 'status': 'queued'}
+
+    def test_forward_pipeorgan_down_returns_502(self, client):
+        job_id = client.job_ids[0]
+        with patch('requests.post', side_effect=Exception('connection refused')):
+            rv = client.post(f'/api/forward/{job_id}')
+        assert rv.status_code == 502
+        assert 'connection refused' in rv.get_json()['error']

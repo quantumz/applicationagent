@@ -229,6 +229,42 @@ def get_data_files():
     return jsonify({'files': [f.name for f in files]})
 
 
+@app.route('/api/forward/<int:job_id>', methods=['POST'])
+def forward_to_pipeorgan(job_id):
+    import requests as _requests
+    from core.database import get_job_detail
+
+    job = get_job_detail(job_id)
+    if not job:
+        return jsonify({'error': 'job not found'}), 404
+
+    pipeorgan_url = os.getenv('PIPEORGAN_URL', 'http://localhost:8092')
+
+    resume_type = job['resume_type']
+    resume_path = PROJECT_ROOT / 'resumes' / resume_type / f'{resume_type}.txt'
+    resume_text = resume_path.read_text() if resume_path.exists() else ''
+
+    payload = {
+        'job_id': str(job_id),
+        'company': job['company'],
+        'title': job['title'],
+        'jd': job['description'],
+        'resume': resume_text,
+        'ats_score': job['fit_score'],
+    }
+
+    try:
+        resp = _requests.post(
+            f'{pipeorgan_url}/api/jobs',
+            json=payload,
+            timeout=10
+        )
+        resp.raise_for_status()
+        return jsonify({'status': 'forwarded', 'pipeorgan': resp.json()})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 502
+
+
 @app.route('/api/applied/<int:job_id>', methods=['POST', 'DELETE'])
 def toggle_applied(job_id):
     from core.database import set_applied
