@@ -330,6 +330,8 @@ tr:hover td { background: var(--bg-panel); }
 
 .consider-btn { background: none; border: 1px solid #c8960c; color: #c8960c; padding: 2px 7px; border-radius: 3px; font-size: 11px; cursor: pointer; white-space: nowrap; }
 .consider-btn:hover { background: #c8960c22; }
+.forge-btn { background: transparent; border: 1px solid #00ff88; color: #00ff88; padding: 2px 8px; font-family: monospace; font-size: 11px; cursor: pointer; }
+.forge-btn:hover { background: #00ff8822; }
 .consider-cell { width: 80px; text-align: center; }
 
 .score-high  { color: var(--green); }

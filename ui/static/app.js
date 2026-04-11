@@ -197,6 +197,31 @@ function markConsider(jobId, score, btn) {
     });
 }
 
+// ── Forward to Pipeorgan ─────────────────────────────────────────────────────
+
+async function forwardToForge(jobId) {
+    const btn = document.querySelector(`.forge-btn[data-job-id="${jobId}"]`);
+    btn.textContent = '→ sending...';
+    btn.disabled = true;
+
+    try {
+        const resp = await fetch(`/api/forward/${jobId}`, { method: 'POST' });
+        const data = await resp.json();
+        if (resp.ok) {
+            btn.textContent = '✓ queued';
+            btn.style.color = '#00aa44';
+        } else {
+            btn.textContent = '✗ failed';
+            btn.style.color = '#ff4444';
+            btn.disabled = false;
+        }
+    } catch (e) {
+        btn.textContent = '✗ error';
+        btn.style.color = '#ff4444';
+        btn.disabled = false;
+    }
+}
+
 // ── Low-score URL intercept ──────────────────────────────────────────────────
 
 let _pendingUrl = null;
@@ -275,6 +300,9 @@ function buildResultsTable(results) {
         const considerBtn = showConsider
             ? `<button class="consider-btn" onclick="markConsider(${r.id}, ${score}, this)">Consider</button>`
             : '';
+        const forgeBtn = r.decision === 'STRONG_MATCH'
+            ? `<button class="forge-btn" data-job-id="${r.id}" onclick="forwardToForge(${r.id})">→ FORGE</button>`
+            : '';
         return `<tr class="${rowClass}" data-search-query="${searchQuery}" data-job-id="${r.id}">
             <td class="applied-cb-cell"><input type="checkbox" class="applied-cb" ${r.applied ? 'checked' : ''} onchange="toggleApplied(${r.id}, this)"></td>
             <td class="${decisionClass}" data-decision-cell>${r.decision}</td>
@@ -285,7 +313,7 @@ function buildResultsTable(results) {
             <td>${job.salary || ''}</td>
             <td>${ai.ats_pass_likelihood || ''}</td>
             <td>${reasoning}</td>
-            <td class="consider-cell">${considerBtn}</td>
+            <td class="consider-cell">${considerBtn}${forgeBtn}</td>
             <td class="delete-cell"><button class="delete-btn" onclick="openDeleteModal(${idx}, this.closest('tr'))">×</button></td>
         </tr>`;
     }).join('');

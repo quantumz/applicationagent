@@ -457,6 +457,29 @@ def get_all_jobs_for_resume(resume_type):
     return [dict(row) for row in rows]
 
 
+def get_job_detail(job_id):
+    """Return a single job with its analysis data, or None if not found."""
+    with get_db() as conn:
+        row = conn.execute(
+            '''SELECT j.id, j.resume_type, j.title, j.company, j.description,
+                      a.fit_score
+               FROM jobs j
+               LEFT JOIN analysis a ON a.job_id = j.id
+               WHERE j.id = ?''',
+            (job_id,)
+        ).fetchone()
+    if not row:
+        return None
+    return {
+        'id': row['id'],
+        'resume_type': row['resume_type'],
+        'title': row['title'],
+        'company': row['company'],
+        'description': row['description'] or '',
+        'fit_score': row['fit_score'] or 0.0,
+    }
+
+
 def get_jobs_by_ids(job_ids):
     """Return jobs matching the given list of IDs."""
     if not job_ids:
