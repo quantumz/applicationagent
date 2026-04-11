@@ -301,7 +301,7 @@ function buildResultsTable(results) {
             ? `<button class="consider-btn" onclick="markConsider(${r.id}, ${score}, this)">Consider</button>`
             : '';
         const forgeBtn = r.decision === 'STRONG_MATCH'
-            ? `<button class="forge-btn" data-job-id="${r.id}" onclick="forwardToForge(${r.id})" style="color:#00ff88;background:transparent;border:1px solid #00ff88;padding:2px 8px;cursor:pointer;font-family:monospace;font-size:11px;">→ FORGE</button>`
+            ? `<button class="forge-btn" data-job-id="${r.id}" onclick="forwardToForge(${r.id})">→ FORGE</button>`
             : '';
         return `<tr class="${rowClass}" data-search-query="${searchQuery}" data-job-id="${r.id}">
             <td class="applied-cb-cell"><input type="checkbox" class="applied-cb" ${r.applied ? 'checked' : ''} onchange="toggleApplied(${r.id}, this)"></td>
