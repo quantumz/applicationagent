@@ -523,6 +523,17 @@ def get_job_by_pipeorgan_id(pipeorgan_job_id):
     }
 
 
+def get_pipeorgan_job_id(job_id):
+    """Return the pipeorgan_job_id string for the given appagent job_id, or None."""
+    with get_db() as conn:
+        row = conn.execute(
+            'SELECT pipeorgan_job_id FROM jobs WHERE id = ?', (job_id,)
+        ).fetchone()
+    if not row:
+        return None
+    return row['pipeorgan_job_id']
+
+
 def set_forge_status(pipeorgan_job_id, status):
     """Set forge_status on the job row matching pipeorgan_job_id."""
     with get_db() as conn:

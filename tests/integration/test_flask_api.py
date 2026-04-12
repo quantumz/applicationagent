@@ -802,3 +802,44 @@ class TestForgeComplete:
         assert event == 'forge_complete'
         assert data['pipeorgan_job_id'] == pid
         assert data['job_id'] == client.job_ids[0]
+
+
+# ── GET /api/jobs/<job_id>/resume ─────────────────────────────────────────────
+
+class TestJobResumePdf:
+
+    def _seed_forge(self, client, tmp_path, pipeorgan_job_id='po-dl-1'):
+        """Wire a seeded job to a pipeorgan_job_id and write a stub PDF on disk."""
+        import ui.app as app_module
+        app_module.PROJECT_ROOT = tmp_path
+        core_db.set_pipeorgan_job_id(client.job_ids[0], pipeorgan_job_id)
+        pdf_dir = tmp_path / 'output' / 'pdf'
+        pdf_dir.mkdir(parents=True, exist_ok=True)
+        pdf_path = pdf_dir / f'forge_{pipeorgan_job_id}.pdf'
+        pdf_path.write_bytes(b'%PDF-1.4 stub')
+        return client.job_ids[0], pipeorgan_job_id
+
+    def test_unknown_job_id_returns_404(self, client):
+        rv = client.get('/api/jobs/99999/resume')
+        assert rv.status_code == 404
+
+    def test_job_without_pipeorgan_id_returns_404(self, client):
+        # job_ids[0] has no pipeorgan_job_id set by default
+        rv = client.get(f'/api/jobs/{client.job_ids[0]}/resume')
+        assert rv.status_code == 404
+
+    def test_pipeorgan_id_set_but_pdf_missing_returns_404(self, client, tmp_path):
+        import ui.app as app_module
+        app_module.PROJECT_ROOT = tmp_path
+        core_db.set_pipeorgan_job_id(client.job_ids[0], 'po-no-pdf')
+        # pdf_dir exists but file does not
+        (tmp_path / 'output' / 'pdf').mkdir(parents=True, exist_ok=True)
+        rv = client.get(f'/api/jobs/{client.job_ids[0]}/resume')
+        assert rv.status_code == 404
+
+    def test_valid_job_serves_pdf(self, client, tmp_path):
+        job_id, _ = self._seed_forge(client, tmp_path)
+        rv = client.get(f'/api/jobs/{job_id}/resume')
+        assert rv.status_code == 200
+        assert rv.content_type == 'application/pdf'
+        assert rv.data == b'%PDF-1.4 stub'

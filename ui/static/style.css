@@ -332,6 +332,7 @@ tr:hover td { background: var(--bg-panel); }
 .consider-btn:hover { background: #c8960c22; }
 .forge-btn { background: transparent; border: 1px solid #00ff88; color: #00ff88; padding: 2px 8px; font-family: monospace; font-size: 11px; cursor: pointer; }
 .forge-btn:hover { background: #00ff8822; }
+a.pass-link { text-decoration: none; display: inline-block; }
 .consider-cell { width: 80px; text-align: center; }
 
 .score-high  { color: var(--green); }

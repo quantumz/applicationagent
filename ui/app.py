@@ -657,6 +657,19 @@ def settings_save_apikey():
     return jsonify({'status': 'ok', 'port': 8080})
 
 
+@app.route('/api/jobs/<int:job_id>/resume')
+def job_resume_pdf(job_id):
+    """Serve the forge-generated PDF for a given appagent job ID."""
+    from core.database import get_pipeorgan_job_id
+    pipeorgan_job_id = get_pipeorgan_job_id(job_id)
+    if not pipeorgan_job_id:
+        abort(404)
+    pdf_path = PROJECT_ROOT / 'output' / 'pdf' / f'forge_{pipeorgan_job_id}.pdf'
+    if not pdf_path.exists():
+        abort(404)
+    return send_file(pdf_path, mimetype='application/pdf')
+
+
 @app.route('/output/pdf/<path:filename>')
 def serve_pdf(filename):
     pdf_path = PROJECT_ROOT / 'output' / 'pdf' / filename
