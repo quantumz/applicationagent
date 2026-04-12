@@ -207,10 +207,12 @@ function connectSseEvents() {
         const payload = JSON.parse(e.data);
         const btn = document.querySelector(`.forge-btn[data-job-id="${payload.job_id}"]`);
         if (!btn) return;
-        btn.textContent = '✓ PASS';
-        btn.style.color = '#00ff88';
-        btn.style.borderColor = '#00ff88';
-        btn.disabled = true;
+        const link = document.createElement('a');
+        link.href = `/api/jobs/${payload.job_id}/resume`;
+        link.target = '_blank';
+        link.className = 'forge-btn pass-link';
+        link.textContent = '[ PASS ]';
+        btn.replaceWith(link);
     });
 
     es.onerror = () => {
