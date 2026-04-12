@@ -49,6 +49,10 @@ def _startup():
 _startup()
 
 
+@app.route('/api/health')
+def health():
+    return jsonify({'status': 'ok'})
+
 @app.route('/')
 def index():
     return render_template('index.html')
@@ -242,14 +246,16 @@ def forward_to_pipeorgan(job_id):
 
     resume_type = job['resume_type']
     resume_path = PROJECT_ROOT / 'resumes' / resume_type / f'{resume_type}.txt'
-    resume_text = resume_path.read_text() if resume_path.exists() else ''
+    if not resume_path.exists():
+        return jsonify({'error': f'resume not found: {resume_type}'}), 400
+    resume_text = resume_path.read_text()
 
     payload = {
         'job_id': str(job_id),
         'company': job['company'],
         'title': job['title'],
         'jd': job['description'],
-        'resume': resume_text,
+        'resume_raw': resume_text,
         'ats_score': job['fit_score'],
     }
 
