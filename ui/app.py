@@ -51,7 +51,7 @@ _startup()
 
 @app.route('/api/health')
 def health():
-    return jsonify({'status': 'ok'})
+    return jsonify({'status': 'ok', 'port': 8080})
 
 @app.route('/')
 def index():
@@ -135,7 +135,7 @@ def update_resume(resume_id):
             json.dump(criteria, f, indent=2)
     except Exception as e:
         return jsonify({'error': f'DB updated but file write failed: {e}'}), 500
-    return jsonify({'status': 'ok'})
+    return jsonify({'status': 'ok', 'port': 8080})
 
 
 @app.route('/api/resumes/<int:resume_id>', methods=['DELETE'])
@@ -197,7 +197,7 @@ def upload_resume_version(resume_id):
         txt_path.write_bytes(file_bytes)
 
     upsert_resume(resume['name'], str(txt_path), resume['search_criteria'])
-    return jsonify({'status': 'ok'})
+    return jsonify({'status': 'ok', 'port': 8080})
 
 
 @app.route('/api/results')
@@ -275,7 +275,7 @@ def forward_to_pipeorgan(job_id):
 def toggle_applied(job_id):
     from core.database import set_applied
     set_applied(job_id, request.method == 'POST')
-    return jsonify({'status': 'ok'})
+    return jsonify({'status': 'ok', 'port': 8080})
 
 
 @app.route('/api/consider/<int:job_id>', methods=['POST'])
@@ -541,7 +541,7 @@ def settings_save_apikey():
 
     set_key(api_key)  # hashes to DB, sets os.environ
     app.logger.info('[keystore] API key saved: %s', mask_key(api_key))
-    return jsonify({'status': 'ok'})
+    return jsonify({'status': 'ok', 'port': 8080})
 
 
 @app.route('/output/pdf/<path:filename>')
