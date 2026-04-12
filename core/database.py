@@ -88,6 +88,10 @@ def init_db():
             conn.execute('ALTER TABLE jobs ADD COLUMN override_from_score REAL DEFAULT NULL')
         if 'override_note' not in existing_cols:
             conn.execute('ALTER TABLE jobs ADD COLUMN override_note TEXT DEFAULT NULL')
+        if 'pipeorgan_job_id' not in existing_cols:
+            conn.execute('ALTER TABLE jobs ADD COLUMN pipeorgan_job_id TEXT DEFAULT NULL')
+        if 'forge_status' not in existing_cols:
+            conn.execute('ALTER TABLE jobs ADD COLUMN forge_status TEXT DEFAULT NULL')
 
 
 def upsert_job(resume_type, source, title, company, location, salary, url,
@@ -491,3 +495,38 @@ def get_jobs_by_ids(job_ids):
             job_ids
         ).fetchall()
     return [dict(row) for row in rows]
+
+
+def set_pipeorgan_job_id(job_id, pipeorgan_job_id):
+    """Store the PipeOrgan-assigned job ID on an appagent job row."""
+    with get_db() as conn:
+        conn.execute(
+            'UPDATE jobs SET pipeorgan_job_id=? WHERE id=?',
+            (pipeorgan_job_id, job_id)
+        )
+
+
+def get_job_by_pipeorgan_id(pipeorgan_job_id):
+    """Return {id, title, company, resume_type} for the job matching pipeorgan_job_id, or None."""
+    with get_db() as conn:
+        row = conn.execute(
+            'SELECT id, title, company, resume_type FROM jobs WHERE pipeorgan_job_id=?',
+            (pipeorgan_job_id,)
+        ).fetchone()
+    if not row:
+        return None
+    return {
+        'id': row['id'],
+        'title': row['title'],
+        'company': row['company'],
+        'resume_type': row['resume_type'],
+    }
+
+
+def set_forge_status(pipeorgan_job_id, status):
+    """Set forge_status on the job row matching pipeorgan_job_id."""
+    with get_db() as conn:
+        conn.execute(
+            'UPDATE jobs SET forge_status=? WHERE pipeorgan_job_id=?',
+            (status, pipeorgan_job_id)
+        )

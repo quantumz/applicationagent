@@ -9,9 +9,11 @@ from datetime import datetime
 import base64
 import json
 import os
+import queue
 import re
 import subprocess
 import sys
+import threading
 from dotenv import load_dotenv
 
 import logging
@@ -47,6 +49,53 @@ def _startup():
         print(f'[DB] Registered {resumes} resume(s) from filesystem')
 
 _startup()
+
+# ── SSE broadcast infrastructure ──────────────────────────────────────────────
+
+_sse_clients: list = []
+_sse_lock = threading.Lock()
+
+_PIPEORGAN_JOB_ID_RE = re.compile(r'^[a-zA-Z0-9_-]+$')
+
+
+def _broadcast_sse(event, data):
+    """Push an SSE message to all connected /api/events clients."""
+    msg = f'event: {event}\ndata: {json.dumps(data)}\n\n'
+    with _sse_lock:
+        dead = []
+        for q in _sse_clients:
+            try:
+                q.put_nowait(msg)
+            except queue.Full:
+                dead.append(q)
+        for q in dead:
+            _sse_clients.remove(q)
+
+
+@app.route('/api/events')
+def sse_events():
+    """Persistent SSE subscription. UI connects once; server pushes async events."""
+    client_q = queue.Queue(maxsize=32)
+    with _sse_lock:
+        _sse_clients.append(client_q)
+
+    def generate():
+        try:
+            while True:
+                try:
+                    msg = client_q.get(timeout=2)
+                    yield msg
+                except queue.Empty:
+                    yield ': heartbeat\n\n'
+        finally:
+            with _sse_lock:
+                try:
+                    _sse_clients.remove(client_q)
+                except ValueError:
+                    pass
+
+    return Response(generate(), mimetype='text/event-stream',
+                    headers={'Cache-Control': 'no-cache', 'X-Accel-Buffering': 'no'})
 
 
 @app.route('/api/health')
@@ -266,9 +315,73 @@ def forward_to_pipeorgan(job_id):
             timeout=10
         )
         resp.raise_for_status()
-        return jsonify({'status': 'forwarded', 'pipeorgan': resp.json()})
+        resp_data = resp.json()
+        pipeorgan_job_id = resp_data.get('job_id') or resp_data.get('id')
+        if pipeorgan_job_id:
+            from core.database import set_pipeorgan_job_id
+            set_pipeorgan_job_id(job_id, str(pipeorgan_job_id))
+        else:
+            app.logger.warning('[forge] PipeOrgan response missing job_id for appagent job %s', job_id)
+        return jsonify({'status': 'forwarded', 'pipeorgan': resp_data})
     except Exception as e:
         return jsonify({'error': str(e)}), 502
+
+
+@app.route('/api/jobs/<pipeorgan_job_id>/forge-complete', methods=['POST'])
+def forge_complete(pipeorgan_job_id):
+    """
+    Called by PipeOrgan when tailoring is done.
+    Writes a PDF of the tailored resume, updates forge_status, broadcasts SSE.
+    """
+    if not _PIPEORGAN_JOB_ID_RE.match(pipeorgan_job_id):
+        return jsonify({'error': 'invalid pipeorgan_job_id'}), 400
+
+    data = request.get_json() or {}
+    tailored_resume = data.get('tailored_resume', '').strip()
+    if not tailored_resume:
+        return jsonify({'error': 'tailored_resume required'}), 400
+
+    from core.database import get_job_by_pipeorgan_id, set_forge_status
+    job = get_job_by_pipeorgan_id(pipeorgan_job_id)
+    if not job:
+        return jsonify({'error': 'job not found'}), 404
+
+    # Write plain-text PDF of the tailored resume
+    pdf_dir = PROJECT_ROOT / 'output' / 'pdf'
+    pdf_dir.mkdir(parents=True, exist_ok=True)
+    pdf_path = pdf_dir / f'forge_{pipeorgan_job_id}.pdf'
+    try:
+        from reportlab.lib.pagesizes import letter
+        from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+        from reportlab.lib.units import inch
+        from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer
+        from reportlab.lib.enums import TA_LEFT
+
+        doc = SimpleDocTemplate(str(pdf_path), pagesize=letter,
+                                rightMargin=0.75*inch, leftMargin=0.75*inch,
+                                topMargin=0.75*inch, bottomMargin=0.75*inch)
+        styles = getSampleStyleSheet()
+        mono = ParagraphStyle('Mono', parent=styles['Normal'],
+                              fontName='Courier', fontSize=9, leading=12,
+                              spaceAfter=0, alignment=TA_LEFT)
+        story = []
+        for line in tailored_resume.splitlines():
+            story.append(Paragraph(line if line.strip() else '&nbsp;', mono))
+        doc.build(story)
+    except Exception as e:
+        app.logger.error('[forge] PDF write failed for %s: %s', pipeorgan_job_id, e)
+        return jsonify({'error': f'PDF write failed: {e}'}), 500
+
+    set_forge_status(pipeorgan_job_id, 'pass')
+
+    _broadcast_sse('forge_complete', {
+        'pipeorgan_job_id': pipeorgan_job_id,
+        'job_id': job['id'],
+        'title': job['title'],
+        'company': job['company'],
+    })
+
+    return jsonify({'ok': True})
 
 
 @app.route('/api/applied/<int:job_id>', methods=['POST', 'DELETE'])

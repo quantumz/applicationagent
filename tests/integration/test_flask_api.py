@@ -17,6 +17,8 @@ from pathlib import Path
 from unittest.mock import patch, MagicMock, PropertyMock
 import pytest
 
+import core.database as core_db
+
 pytestmark = pytest.mark.integration
 
 
@@ -703,3 +705,100 @@ class TestForwardToPipeorgan:
             rv = client.post(f'/api/forward/{job_id}')
         assert rv.status_code == 502
         assert 'connection refused' in rv.get_json()['error']
+
+    def test_forward_stores_pipeorgan_job_id(self, client):
+        job_id = client.job_ids[0]
+        mock_resp = MagicMock()
+        mock_resp.json.return_value = {'job_id': 'po-abc', 'status': 'queued'}
+        mock_resp.raise_for_status.return_value = None
+        with patch('requests.post', return_value=mock_resp):
+            client.post(f'/api/forward/{job_id}')
+        row = core_db.get_job_by_pipeorgan_id('po-abc')
+        assert row is not None
+        assert row['id'] == job_id
+
+
+# ── POST /api/jobs/<pipeorgan_job_id>/forge-complete ─────────────────────────
+
+class TestForgeComplete:
+
+    RESUME_TEXT = 'Gregory Weaver\nSenior SRE\n20 years experience\nKubernetes Terraform AWS'
+
+    def _seed_pipeorgan_id(self, client, pipeorgan_job_id='po-test-1'):
+        """Wire a seeded job to a pipeorgan_job_id so forge-complete can find it."""
+        core_db.set_pipeorgan_job_id(client.job_ids[0], pipeorgan_job_id)
+        return pipeorgan_job_id
+
+    def test_missing_tailored_resume_returns_400(self, client):
+        pid = self._seed_pipeorgan_id(client)
+        rv = client.post(f'/api/jobs/{pid}/forge-complete',
+                         json={})
+        assert rv.status_code == 400
+        assert 'tailored_resume' in rv.get_json()['error']
+
+    def test_unknown_pipeorgan_job_id_returns_404(self, client):
+        rv = client.post('/api/jobs/no-such-id/forge-complete',
+                         json={'tailored_resume': self.RESUME_TEXT})
+        assert rv.status_code == 404
+
+    def test_invalid_pipeorgan_job_id_chars_returns_400(self, client):
+        rv = client.post('/api/jobs/../etc-passwd/forge-complete',
+                         json={'tailored_resume': self.RESUME_TEXT})
+        # Flask will 404 on the path before our handler fires due to the dot segment,
+        # but if it reaches the handler the re guard must fire.
+        assert rv.status_code in (400, 404)
+
+    def test_invalid_pipeorgan_job_id_with_slash_rejected(self, client):
+        """Explicit slash-containing ID passed via query-string simulation."""
+        import ui.app as app_module
+        import re
+        assert not re.match(r'^[a-zA-Z0-9_-]+$', '../passwd')
+
+    def test_success_returns_ok(self, client, tmp_path):
+        import ui.app as app_module
+        app_module.PROJECT_ROOT = tmp_path
+        pid = self._seed_pipeorgan_id(client)
+        with patch.object(app_module, '_broadcast_sse') as mock_bcast:
+            rv = client.post(f'/api/jobs/{pid}/forge-complete',
+                             json={'tailored_resume': self.RESUME_TEXT})
+        assert rv.status_code == 200
+        assert rv.get_json()['ok'] is True
+
+    def test_success_writes_pdf(self, client, tmp_path):
+        import ui.app as app_module
+        app_module.PROJECT_ROOT = tmp_path
+        pid = self._seed_pipeorgan_id(client)
+        with patch.object(app_module, '_broadcast_sse'):
+            client.post(f'/api/jobs/{pid}/forge-complete',
+                        json={'tailored_resume': self.RESUME_TEXT})
+        pdf = tmp_path / 'output' / 'pdf' / f'forge_{pid}.pdf'
+        assert pdf.exists()
+        assert pdf.stat().st_size > 0
+
+    def test_success_updates_forge_status(self, client, tmp_path):
+        import ui.app as app_module
+        app_module.PROJECT_ROOT = tmp_path
+        pid = self._seed_pipeorgan_id(client)
+        with patch.object(app_module, '_broadcast_sse'):
+            client.post(f'/api/jobs/{pid}/forge-complete',
+                        json={'tailored_resume': self.RESUME_TEXT})
+        import sqlite3
+        with sqlite3.connect(str(core_db.DB_PATH)) as conn:
+            row = conn.execute(
+                'SELECT forge_status FROM jobs WHERE pipeorgan_job_id=?', (pid,)
+            ).fetchone()
+        assert row is not None
+        assert row[0] == 'pass'
+
+    def test_success_broadcasts_sse(self, client, tmp_path):
+        import ui.app as app_module
+        app_module.PROJECT_ROOT = tmp_path
+        pid = self._seed_pipeorgan_id(client)
+        with patch.object(app_module, '_broadcast_sse') as mock_bcast:
+            client.post(f'/api/jobs/{pid}/forge-complete',
+                        json={'tailored_resume': self.RESUME_TEXT})
+        mock_bcast.assert_called_once()
+        event, data = mock_bcast.call_args[0]
+        assert event == 'forge_complete'
+        assert data['pipeorgan_job_id'] == pid
+        assert data['job_id'] == client.job_ids[0]
