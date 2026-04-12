@@ -4,6 +4,7 @@ document.addEventListener('DOMContentLoaded', () => {
     checkApiKeySetup();
     loadResumes();
     loadSidebarResumes();
+    connectSseEvents();
 
     document.addEventListener('paste', function(e) {
         if (!analyzeModalOpen) return;
@@ -197,6 +198,28 @@ function markConsider(jobId, score, btn) {
     });
 }
 
+// ── Server-Sent Events ───────────────────────────────────────────────────────
+
+function connectSseEvents() {
+    const es = new EventSource('/api/events');
+
+    es.addEventListener('forge_complete', (e) => {
+        const payload = JSON.parse(e.data);
+        const btn = document.querySelector(`.forge-btn[data-job-id="${payload.job_id}"]`);
+        if (!btn) return;
+        btn.textContent = '✓ PASS';
+        btn.style.color = '#00ff88';
+        btn.style.borderColor = '#00ff88';
+        btn.disabled = true;
+    });
+
+    es.onerror = () => {
+        // Reconnect after 5s on connection drop
+        es.close();
+        setTimeout(connectSseEvents, 5000);
+    };
+}
+
 // ── Forward to Pipeorgan ─────────────────────────────────────────────────────
 
 async function forwardToForge(jobId) {
@@ -208,15 +231,15 @@ async function forwardToForge(jobId) {
         const resp = await fetch(`/api/forward/${jobId}`, { method: 'POST' });
         const data = await resp.json();
         if (resp.ok) {
-            btn.textContent = '✓ queued';
-            btn.style.color = '#00aa44';
+            btn.textContent = '[ QUEUED ]';
+            btn.style.color = '#00cc66';
         } else {
-            btn.textContent = '✗ failed';
+            btn.textContent = '[ FAILED ]';
             btn.style.color = '#ff4444';
             btn.disabled = false;
         }
     } catch (e) {
-        btn.textContent = '✗ error';
+        btn.textContent = '[ ERROR ]';
         btn.style.color = '#ff4444';
         btn.disabled = false;
     }
