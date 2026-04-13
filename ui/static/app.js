@@ -205,6 +205,14 @@ function connectSseEvents() {
 
     es.addEventListener('forge_complete', (e) => {
         const payload = JSON.parse(e.data);
+
+        // Close the modal if it's open for this job
+        const modal = document.getElementById('forge-modal');
+        if (modal && modal.dataset.jobId === String(payload.job_id)) {
+            modal.remove();
+        }
+
+        // Replace FORGE button with PASS download link
         const btn = document.querySelector(`.forge-btn[data-job-id="${payload.job_id}"]`);
         if (!btn) return;
         const link = document.createElement('a');
@@ -222,29 +230,40 @@ function connectSseEvents() {
     };
 }
 
-// ── Forward to Pipeorgan ─────────────────────────────────────────────────────
+// ── Forge Modal ───────────────────────────────────────────────────────────────
 
-async function forwardToForge(jobId) {
-    const btn = document.querySelector(`.forge-btn[data-job-id="${jobId}"]`);
-    btn.textContent = '→ sending...';
-    btn.disabled = true;
+function openForgeModal(jobId) {
+    // Guard: remove any existing modal before opening a new one
+    const existing = document.getElementById('forge-modal');
+    if (existing) existing.remove();
 
-    try {
-        const resp = await fetch(`/api/forward/${jobId}`, { method: 'POST' });
-        const data = await resp.json();
-        if (resp.ok) {
-            btn.textContent = '[ QUEUED ]';
-            btn.style.color = '#00cc66';
-        } else {
-            btn.textContent = '[ FAILED ]';
-            btn.style.color = '#ff4444';
-            btn.disabled = false;
-        }
-    } catch (e) {
-        btn.textContent = '[ ERROR ]';
-        btn.style.color = '#ff4444';
-        btn.disabled = false;
-    }
+    const modal = document.createElement('div');
+    modal.id = 'forge-modal';
+    modal.dataset.jobId = jobId;
+    modal.style.cssText = `
+        position: fixed; inset: 0; z-index: 1000;
+        background: #0a0a0a;
+        display: flex; flex-direction: column;
+    `;
+
+    const header = document.createElement('div');
+    header.style.cssText = `
+        display: flex; justify-content: flex-end;
+        padding: 0.5rem 1rem;
+        border-bottom: 1px solid #00ff88;
+    `;
+    const closeBtn = document.createElement('button');
+    closeBtn.textContent = '[ close ]';
+    closeBtn.addEventListener('click', () => modal.remove());
+    header.appendChild(closeBtn);
+
+    const iframe = document.createElement('iframe');
+    iframe.src = `http://localhost:8091/?job_id=${jobId}`;
+    iframe.style.cssText = 'flex:1; border:none; width:100%;';
+
+    modal.appendChild(header);
+    modal.appendChild(iframe);
+    document.body.appendChild(modal);
 }
 
 // ── Low-score URL intercept ──────────────────────────────────────────────────
@@ -326,7 +345,7 @@ function buildResultsTable(results) {
             ? `<button class="consider-btn" onclick="markConsider(${r.id}, ${score}, this)">Consider</button>`
             : '';
         const forgeBtn = r.decision === 'STRONG_MATCH'
-            ? `<button class="forge-btn" data-job-id="${r.id}" onclick="forwardToForge(${r.id})">→ FORGE</button>`
+            ? `<button class="forge-btn" data-job-id="${r.id}" onclick="openForgeModal(${r.id})">[ FORGE ]</button>`
             : '';
         return `<tr class="${rowClass}" data-search-query="${searchQuery}" data-job-id="${r.id}">
             <td class="applied-cb-cell"><input type="checkbox" class="applied-cb" ${r.applied ? 'checked' : ''} onchange="toggleApplied(${r.id}, this)"></td>
