@@ -670,6 +670,27 @@ def job_resume_pdf(job_id):
     return send_file(pdf_path, mimetype='application/pdf')
 
 
+@app.route('/api/jobs/<int:job_id>/detail')
+def job_detail(job_id):
+    """Return everything ResumeForge needs to pre-populate its start screen."""
+    from core.database import get_job_detail
+    job = get_job_detail(job_id)
+    if not job:
+        abort(404)
+    resume_type = job['resume_type']
+    resume_path = PROJECT_ROOT / 'resumes' / resume_type / f'{resume_type}.txt'
+    if not resume_path.exists():
+        abort(404)
+    return jsonify({
+        'job_id':      job['id'],
+        'title':       job['title'],
+        'company':     job['company'],
+        'description': job['description'],
+        'resume_type': resume_type,
+        'resume_text': resume_path.read_text(),
+    })
+
+
 @app.route('/output/pdf/<path:filename>')
 def serve_pdf(filename):
     pdf_path = PROJECT_ROOT / 'output' / 'pdf' / filename
