@@ -8,6 +8,7 @@ from pathlib import Path
 from datetime import datetime
 import base64
 import json
+import logging
 import os
 import queue
 import re
@@ -16,7 +17,7 @@ import sys
 import threading
 from dotenv import load_dotenv
 
-import logging
+import paho.mqtt.client as mqtt
 
 _log_level = logging.DEBUG if os.environ.get('APPLICATIONAGENT_DEBUG') else logging.WARNING
 logging.basicConfig(
@@ -35,9 +36,99 @@ else:
 ENV_PATH = PROJECT_ROOT / '.env'
 load_dotenv(ENV_PATH, override=True)  # load at startup so key is in os.environ
 
+MQTT_BROKER_HOST = os.environ.get('MQTT_BROKER_HOST', 'localhost')
+MQTT_BROKER_PORT = int(os.environ.get('MQTT_BROKER_PORT', 1883))
+
 # Init DB and migrate existing JSON data on startup
 sys.path.insert(0, str(PROJECT_ROOT))
 from core.database import init_db, import_from_json, migrate_resumes_from_fs
+
+_mqtt_log = logging.getLogger('aa.mqtt')
+
+
+def _handle_forge_complete(payload: dict) -> None:
+    """Handle suite/jobs/complete — write PDF, update status, broadcast SSE."""
+    try:
+        job_id = int(payload.get('job_id', 0))
+        final_resume = payload.get('final_resume', '').strip()
+        tc_score = payload.get('tc_score', 0.0)
+    except (ValueError, TypeError):
+        _mqtt_log.warning('[mqtt] suite/jobs/complete — invalid payload: %s', payload)
+        return
+
+    if not job_id or not final_resume:
+        _mqtt_log.warning('[mqtt] suite/jobs/complete — missing job_id or final_resume')
+        return
+
+    from core.database import get_job_detail, set_forge_status_by_job_id
+    job = get_job_detail(job_id)
+    if not job:
+        _mqtt_log.warning('[mqtt] suite/jobs/complete — job %s not found', job_id)
+        return
+
+    # Write PDF of the tailored resume
+    pdf_dir = PROJECT_ROOT / 'output' / 'pdf'
+    pdf_dir.mkdir(parents=True, exist_ok=True)
+    pdf_path = pdf_dir / f'forge_{job_id}.pdf'
+    try:
+        from reportlab.lib.pagesizes import letter
+        from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+        from reportlab.lib.units import inch
+        from reportlab.platypus import SimpleDocTemplate, Paragraph
+        from reportlab.lib.enums import TA_LEFT
+
+        doc = SimpleDocTemplate(str(pdf_path), pagesize=letter,
+                                rightMargin=0.75*inch, leftMargin=0.75*inch,
+                                topMargin=0.75*inch, bottomMargin=0.75*inch)
+        styles = getSampleStyleSheet()
+        mono = ParagraphStyle('Mono', parent=styles['Normal'],
+                              fontName='Courier', fontSize=9, leading=12,
+                              spaceAfter=0, alignment=TA_LEFT)
+        story = []
+        for line in final_resume.splitlines():
+            story.append(Paragraph(line if line.strip() else '&nbsp;', mono))
+        doc.build(story)
+        _mqtt_log.info('[mqtt] forge PDF written: %s', pdf_path)
+    except Exception as e:
+        _mqtt_log.error('[mqtt] PDF write failed for job %s: %s', job_id, e)
+        return
+
+    set_forge_status_by_job_id(job_id, 'pass')
+
+    _broadcast_sse('forge_complete', {
+        'job_id': job_id,
+        'title': job['title'],
+        'company': job['company'],
+        'tc_score': tc_score,
+    })
+    _mqtt_log.info('[mqtt] forge_complete SSE broadcast for job %s', job_id)
+
+
+def _start_mqtt_subscriber() -> None:
+    """Start background MQTT subscriber for suite/jobs/complete."""
+    def on_message(client, userdata, msg):
+        try:
+            payload = json.loads(msg.payload.decode())
+            _mqtt_log.info('[mqtt] received %s', msg.topic)
+            _handle_forge_complete(payload)
+        except Exception:
+            _mqtt_log.exception('[mqtt] failed to handle %s', msg.topic)
+
+    def run():
+        client = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2)
+        client.on_message = on_message
+        try:
+            client.connect(MQTT_BROKER_HOST, MQTT_BROKER_PORT)
+            client.subscribe('suite/jobs/complete')
+            _mqtt_log.info('[mqtt] subscribed to suite/jobs/complete on %s:%s',
+                           MQTT_BROKER_HOST, MQTT_BROKER_PORT)
+            client.loop_forever()
+        except Exception:
+            _mqtt_log.exception('[mqtt] subscriber failed to connect — forge complete events disabled')
+
+    t = threading.Thread(target=run, daemon=True, name='mqtt-subscriber')
+    t.start()
+
 
 def _startup():
     init_db()
@@ -47,6 +138,7 @@ def _startup():
     resumes = migrate_resumes_from_fs(PROJECT_ROOT)
     if resumes:
         print(f'[DB] Registered {resumes} resume(s) from filesystem')
+    _start_mqtt_subscriber()
 
 _startup()
 
@@ -54,8 +146,6 @@ _startup()
 
 _sse_clients: list = []
 _sse_lock = threading.Lock()
-
-_PIPEORGAN_JOB_ID_RE = re.compile(r'^[a-zA-Z0-9_-]+$')
 
 
 def _broadcast_sse(event, data):
@@ -283,105 +373,47 @@ def get_data_files():
 
 
 @app.route('/api/forward/<int:job_id>', methods=['POST'])
-def forward_to_pipeorgan(job_id):
-    import requests as _requests
+def submit_to_forge(job_id):
+    """Publish suite/jobs/submitted to kick off the MQTT forge pipeline."""
     from core.database import get_job_detail
+    import json as _json
 
     job = get_job_detail(job_id)
     if not job:
         return jsonify({'error': 'job not found'}), 404
 
-    pipeorgan_url = os.getenv('PIPEORGAN_URL', 'http://localhost:8092')
-
     resume_type = job['resume_type']
     resume_path = PROJECT_ROOT / 'resumes' / resume_type / f'{resume_type}.txt'
     if not resume_path.exists():
         return jsonify({'error': f'resume not found: {resume_type}'}), 400
-    resume_text = resume_path.read_text()
+
+    # Extract missing_keywords from ai_analysis if present
+    missing_keywords = []
+    try:
+        ai = _json.loads(job.get('ai_analysis') or '{}')
+        missing_keywords = ai.get('missing_keywords', [])
+    except Exception:
+        pass
 
     payload = {
-        'job_id': str(job_id),
-        'company': job['company'],
-        'title': job['title'],
-        'jd': job['description'],
-        'resume_raw': resume_text,
-        'ats_score': job['fit_score'],
+        'job_id':           str(job_id),
+        'resume_id':        resume_type,
+        'jd':               job['description'],
+        'score':            job['fit_score'],
+        'missing_keywords': missing_keywords,
+        'run':              0,
     }
 
     try:
-        resp = _requests.post(
-            f'{pipeorgan_url}/api/jobs',
-            json=payload,
-            timeout=10
-        )
-        resp.raise_for_status()
-        resp_data = resp.json()
-        pipeorgan_job_id = resp_data.get('job_id') or resp_data.get('id')
-        if pipeorgan_job_id:
-            from core.database import set_pipeorgan_job_id
-            set_pipeorgan_job_id(job_id, str(pipeorgan_job_id))
-        else:
-            app.logger.warning('[forge] PipeOrgan response missing job_id for appagent job %s', job_id)
-        return jsonify({'status': 'forwarded', 'pipeorgan': resp_data})
+        client = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2)
+        client.connect(MQTT_BROKER_HOST, MQTT_BROKER_PORT)
+        client.publish('suite/jobs/submitted', _json.dumps(payload))
+        client.disconnect()
+        app.logger.info('[mqtt] published suite/jobs/submitted for job %s', job_id)
+        return jsonify({'status': 'submitted', 'job_id': job_id})
     except Exception as e:
+        app.logger.error('[mqtt] failed to publish suite/jobs/submitted: %s', e)
         return jsonify({'error': str(e)}), 502
-
-
-@app.route('/api/jobs/<pipeorgan_job_id>/forge-complete', methods=['POST'])
-def forge_complete(pipeorgan_job_id):
-    """
-    Called by PipeOrgan when tailoring is done.
-    Writes a PDF of the tailored resume, updates forge_status, broadcasts SSE.
-    """
-    if not _PIPEORGAN_JOB_ID_RE.match(pipeorgan_job_id):
-        return jsonify({'error': 'invalid pipeorgan_job_id'}), 400
-
-    data = request.get_json() or {}
-    tailored_resume = data.get('tailored_resume', '').strip()
-    if not tailored_resume:
-        return jsonify({'error': 'tailored_resume required'}), 400
-
-    from core.database import get_job_by_pipeorgan_id, set_forge_status
-    job = get_job_by_pipeorgan_id(pipeorgan_job_id)
-    if not job:
-        return jsonify({'error': 'job not found'}), 404
-
-    # Write plain-text PDF of the tailored resume
-    pdf_dir = PROJECT_ROOT / 'output' / 'pdf'
-    pdf_dir.mkdir(parents=True, exist_ok=True)
-    pdf_path = pdf_dir / f'forge_{pipeorgan_job_id}.pdf'
-    try:
-        from reportlab.lib.pagesizes import letter
-        from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
-        from reportlab.lib.units import inch
-        from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer
-        from reportlab.lib.enums import TA_LEFT
-
-        doc = SimpleDocTemplate(str(pdf_path), pagesize=letter,
-                                rightMargin=0.75*inch, leftMargin=0.75*inch,
-                                topMargin=0.75*inch, bottomMargin=0.75*inch)
-        styles = getSampleStyleSheet()
-        mono = ParagraphStyle('Mono', parent=styles['Normal'],
-                              fontName='Courier', fontSize=9, leading=12,
-                              spaceAfter=0, alignment=TA_LEFT)
-        story = []
-        for line in tailored_resume.splitlines():
-            story.append(Paragraph(line if line.strip() else '&nbsp;', mono))
-        doc.build(story)
-    except Exception as e:
-        app.logger.error('[forge] PDF write failed for %s: %s', pipeorgan_job_id, e)
-        return jsonify({'error': f'PDF write failed: {e}'}), 500
-
-    set_forge_status(pipeorgan_job_id, 'pass')
-
-    _broadcast_sse('forge_complete', {
-        'pipeorgan_job_id': pipeorgan_job_id,
-        'job_id': job['id'],
-        'title': job['title'],
-        'company': job['company'],
-    })
-
-    return jsonify({'ok': True})
 
 
 @app.route('/api/applied/<int:job_id>', methods=['POST', 'DELETE'])
@@ -660,11 +692,7 @@ def settings_save_apikey():
 @app.route('/api/jobs/<int:job_id>/resume')
 def job_resume_pdf(job_id):
     """Serve the forge-generated PDF for a given appagent job ID."""
-    from core.database import get_pipeorgan_job_id
-    pipeorgan_job_id = get_pipeorgan_job_id(job_id)
-    if not pipeorgan_job_id:
-        abort(404)
-    pdf_path = PROJECT_ROOT / 'output' / 'pdf' / f'forge_{pipeorgan_job_id}.pdf'
+    pdf_path = PROJECT_ROOT / 'output' / 'pdf' / f'forge_{job_id}.pdf'
     if not pdf_path.exists():
         abort(404)
     return send_file(pdf_path, mimetype='application/pdf')
