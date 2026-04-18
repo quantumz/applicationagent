@@ -541,3 +541,23 @@ def set_forge_status(pipeorgan_job_id, status):
             'UPDATE jobs SET forge_status=? WHERE pipeorgan_job_id=?',
             (status, pipeorgan_job_id)
         )
+
+# Add this function to the END of core/database.py
+# It replaces the pipeorgan_job_id lookup with a direct job_id lookup
+
+def set_forge_status_by_job_id(job_id, status):
+    """Set forge_status on the job row matching job_id directly."""
+    with get_db() as conn:
+        conn.execute(
+            'UPDATE jobs SET forge_status=? WHERE id=?',
+            (status, job_id)
+        )
+
+
+def set_forge_status_by_job_id(job_id, status):
+    """Set forge_status on the job row matching job_id directly."""
+    with get_db() as conn:
+        conn.execute(
+            'UPDATE jobs SET forge_status=? WHERE id=?',
+            (status, job_id)
+        )
