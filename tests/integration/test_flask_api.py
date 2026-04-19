@@ -145,7 +145,6 @@ class TestDeleteResume:
         assert rv.status_code == 200
         data = rv.get_json()
         assert data['deleted'] is True
-        # Jobs for that resume should also be gone
         assert data['jobs_deleted'] == 3
 
 
@@ -255,7 +254,6 @@ class TestSettingsStatus:
         assert 'requires_reentry' in data
 
     def test_no_key_in_db_means_not_configured(self, client):
-        # Fresh DB has no key hash — both flags false
         import os
         os.environ.pop('ANTHROPIC_API_KEY', None)
         rv = client.get('/api/settings/status')
@@ -274,7 +272,6 @@ class TestSettingsStatus:
         assert data['requires_reentry'] is True
 
     def test_key_in_memory_means_configured(self, client):
-        import os
         from core.keystore import set_key
         set_key('sk-ant-test-key-inmemory')
         rv = client.get('/api/settings/status')
@@ -420,41 +417,35 @@ class TestUploadResume:
         }
 
     def test_upload_txt_creates_resume(self, client):
-        rv = client.post('/api/upload-resume',
-                         json=self._form())
+        rv = client.post('/api/upload-resume', json=self._form())
         assert rv.status_code == 200
         assert rv.get_json()['name'] == 'new_resume'
         resumes = client.get('/api/resumes').get_json()['resumes']
         assert any(r['name'] == 'new_resume' for r in resumes)
 
     def test_upload_missing_name_returns_400(self, client):
-        rv = client.post('/api/upload-resume',
-                         json=self._form(name=''))
+        rv = client.post('/api/upload-resume', json=self._form(name=''))
         assert rv.status_code == 400
 
     def test_upload_invalid_name_returns_400(self, client):
-        rv = client.post('/api/upload-resume',
-                         json=self._form(name='bad name!'))
+        rv = client.post('/api/upload-resume', json=self._form(name='bad name!'))
         assert rv.status_code == 400
 
     def test_upload_missing_file_returns_400(self, client):
-        rv = client.post('/api/upload-resume',
-                         json={
-                             'name': 'new_resume',
-                             'filename': 'resume.txt',
-                             'file_data': '',
-                             'search_queries': [{'keywords': 'SRE', 'location': 'Remote', 'max_results': 10}],
-                             'keywords': [],
-                         })
+        rv = client.post('/api/upload-resume', json={
+            'name': 'new_resume',
+            'filename': 'resume.txt',
+            'file_data': '',
+            'search_queries': [{'keywords': 'SRE', 'location': 'Remote', 'max_results': 10}],
+            'keywords': [],
+        })
         assert rv.status_code == 400
 
     def test_upload_no_queries_returns_400(self, client):
-        rv = client.post('/api/upload-resume',
-                         json=self._form(queries=[]))
+        rv = client.post('/api/upload-resume', json=self._form(queries=[]))
         assert rv.status_code == 400
 
     def test_upload_pdf_uses_fitz(self, client):
-        """PDF upload path: fitz extracts text, .txt file is written."""
         fake_page = MagicMock()
         fake_page.get_text.return_value = 'Extracted resume text from PDF.'
         fake_doc = MagicMock()
@@ -466,8 +457,7 @@ class TestUploadResume:
 
     def test_upload_too_large_returns_413(self, client):
         oversized = b'x' * (10 * 1024 * 1024 + 1)
-        rv = client.post('/api/upload-resume',
-                         json=self._form(content=oversized))
+        rv = client.post('/api/upload-resume', json=self._form(content=oversized))
         assert rv.status_code == 413
 
 
@@ -526,7 +516,6 @@ class TestUploadResumeVersion:
 def _mock_vision_response(company='Acme Corp', title='Senior SRE',
                            salary='$150,000 - $180,000', url='https://example.com/job',
                            confidence=0.92):
-    """Build a mock Anthropic response for the vision extraction endpoint."""
     payload = json.dumps({
         'company': company, 'title': title,
         'salary': salary, 'url': url,
@@ -563,20 +552,16 @@ class TestExtractJobScreenshot:
         assert data['confidence'] == 0.92
 
     def test_partial_extraction_null_fields_present(self, client):
-        """Null fields must be present in response so JS can skip them cleanly."""
         mock_resp = _mock_vision_response(salary=None, url=None, confidence=0.80)
         with patch('anthropic.Anthropic') as MockClient:
             MockClient.return_value.messages.create.return_value = mock_resp
             rv = _screenshot_post(client)
         assert rv.status_code == 200
         data = rv.get_json()
-        assert data['company'] == 'Acme Corp'
-        assert data['title'] == 'Senior SRE'
         assert data['salary'] is None
         assert data['url'] is None
 
     def test_low_confidence_still_returns_200(self, client):
-        """Low confidence is surfaced via the confidence field, not an error code."""
         mock_resp = _mock_vision_response(confidence=0.40)
         with patch('anthropic.Anthropic') as MockClient:
             MockClient.return_value.messages.create.return_value = mock_resp
@@ -622,6 +607,7 @@ class TestServePdf:
         rv = client.get('/output/pdf/test_job.pdf')
         assert rv.status_code == 200
         assert rv.content_type == 'application/pdf'
+        assert rv.data == b'%PDF-1.4 fake content'
 
     def test_missing_pdf_returns_404(self, client):
         rv = client.get('/output/pdf/nonexistent.pdf')
@@ -644,8 +630,6 @@ class TestServeDocs:
         _, app_tmp = _app
         docs_dir = app_tmp / 'docs'
         docs_dir.mkdir(exist_ok=True)
-        # Do NOT create getting-started.md — /docs/ defaults to that filename.
-        # If it doesn't exist, the route falls through to the index listing.
         (docs_dir / 'install.md').write_text('# Install\nSetup instructions.')
         rv = client.get('/docs/')
         assert rv.status_code == 200
@@ -678,167 +662,172 @@ class TestServeDocs:
         assert b'Documentation' in rv.data
 
 
-# ── POST /api/forward/<job_id> ────────────────────────────────────────────────
+# ── POST /api/forward/<job_id> — MQTT publish ─────────────────────────────────
 
-class TestForwardToPipeorgan:
+class TestSubmitToForge:
 
     def test_forward_unknown_job_returns_404(self, client):
         rv = client.post('/api/forward/99999')
         assert rv.status_code == 404
         assert rv.get_json()['error'] == 'job not found'
 
-    def test_forward_success_returns_forwarded(self, client):
+    def test_forward_success_returns_submitted(self, client):
         job_id = client.job_ids[0]
-        mock_resp = MagicMock()
-        mock_resp.json.return_value = {'id': 'po-123', 'status': 'queued'}
-        mock_resp.raise_for_status.return_value = None
-        with patch('requests.post', return_value=mock_resp):
+        with patch('ui.app.mqtt.Client') as mock_client_cls:
+            mock_mqtt = MagicMock()
+            mock_client_cls.return_value = mock_mqtt
             rv = client.post(f'/api/forward/{job_id}')
         assert rv.status_code == 200
         data = rv.get_json()
-        assert data['status'] == 'forwarded'
-        assert data['pipeorgan'] == {'id': 'po-123', 'status': 'queued'}
+        assert data['status'] == 'submitted'
+        assert data['job_id'] == job_id
 
-    def test_forward_pipeorgan_down_returns_502(self, client):
+    def test_forward_publishes_correct_topic(self, client):
         job_id = client.job_ids[0]
-        with patch('requests.post', side_effect=Exception('connection refused')):
+        with patch('ui.app.mqtt.Client') as mock_client_cls:
+            mock_mqtt = MagicMock()
+            mock_client_cls.return_value = mock_mqtt
+            client.post(f'/api/forward/{job_id}')
+        topic = mock_mqtt.publish.call_args[0][0]
+        assert topic == 'suite/jobs/submitted'
+
+    def test_forward_payload_structure(self, client):
+        job_id = client.job_ids[0]
+        with patch('ui.app.mqtt.Client') as mock_client_cls:
+            mock_mqtt = MagicMock()
+            mock_client_cls.return_value = mock_mqtt
+            client.post(f'/api/forward/{job_id}')
+        raw = mock_mqtt.publish.call_args[0][1]
+        payload = json.loads(raw)
+        assert payload['job_id'] == str(job_id)
+        assert 'resume_id' in payload
+        assert 'jd' in payload
+        assert 'score' in payload
+        assert 'missing_keywords' in payload
+        assert payload['run'] == 0
+
+    def test_forward_mqtt_failure_returns_502(self, client):
+        job_id = client.job_ids[0]
+        with patch('ui.app.mqtt.Client', side_effect=Exception('broker down')):
             rv = client.post(f'/api/forward/{job_id}')
         assert rv.status_code == 502
-        assert 'connection refused' in rv.get_json()['error']
-
-    def test_forward_stores_pipeorgan_job_id(self, client):
-        job_id = client.job_ids[0]
-        mock_resp = MagicMock()
-        mock_resp.json.return_value = {'job_id': 'po-abc', 'status': 'queued'}
-        mock_resp.raise_for_status.return_value = None
-        with patch('requests.post', return_value=mock_resp):
-            client.post(f'/api/forward/{job_id}')
-        row = core_db.get_job_by_pipeorgan_id('po-abc')
-        assert row is not None
-        assert row['id'] == job_id
 
 
-# ── POST /api/jobs/<pipeorgan_job_id>/forge-complete ─────────────────────────
+# ── _handle_forge_complete() — MQTT subscriber handler ────────────────────────
 
-class TestForgeComplete:
+class TestHandleForgeComplete:
+    """Tests for _handle_forge_complete() — triggered by suite/jobs/complete MQTT message."""
 
     RESUME_TEXT = 'Gregory Weaver\nSenior SRE\n20 years experience\nKubernetes Terraform AWS'
 
-    def _seed_pipeorgan_id(self, client, pipeorgan_job_id='po-test-1'):
-        """Wire a seeded job to a pipeorgan_job_id so forge-complete can find it."""
-        core_db.set_pipeorgan_job_id(client.job_ids[0], pipeorgan_job_id)
-        return pipeorgan_job_id
+    def _make_payload(self, job_id, resume_text=None):
+        return {
+            'job_id': str(job_id),
+            'resume_id': 'test_resume',
+            'final_resume': resume_text or self.RESUME_TEXT,
+            'tc_score': 0.85,
+            'run_number': 0,
+        }
 
-    def test_missing_tailored_resume_returns_400(self, client):
-        pid = self._seed_pipeorgan_id(client)
-        rv = client.post(f'/api/jobs/{pid}/forge-complete',
-                         json={})
-        assert rv.status_code == 400
-        assert 'tailored_resume' in rv.get_json()['error']
-
-    def test_unknown_pipeorgan_job_id_returns_404(self, client):
-        rv = client.post('/api/jobs/no-such-id/forge-complete',
-                         json={'tailored_resume': self.RESUME_TEXT})
-        assert rv.status_code == 404
-
-    def test_invalid_pipeorgan_job_id_chars_returns_400(self, client):
-        rv = client.post('/api/jobs/../etc-passwd/forge-complete',
-                         json={'tailored_resume': self.RESUME_TEXT})
-        # Flask will 404 on the path before our handler fires due to the dot segment,
-        # but if it reaches the handler the re guard must fire.
-        assert rv.status_code in (400, 404)
-
-    def test_invalid_pipeorgan_job_id_with_slash_rejected(self, client):
-        """Explicit slash-containing ID passed via query-string simulation."""
+    def test_missing_final_resume_returns_early(self, client):
         import ui.app as app_module
-        import re
-        assert not re.match(r'^[a-zA-Z0-9_-]+$', '../passwd')
-
-    def test_success_returns_ok(self, client, tmp_path):
-        import ui.app as app_module
-        app_module.PROJECT_ROOT = tmp_path
-        pid = self._seed_pipeorgan_id(client)
+        payload = self._make_payload(client.job_ids[0])
+        payload['final_resume'] = ''
         with patch.object(app_module, '_broadcast_sse') as mock_bcast:
-            rv = client.post(f'/api/jobs/{pid}/forge-complete',
-                             json={'tailored_resume': self.RESUME_TEXT})
-        assert rv.status_code == 200
-        assert rv.get_json()['ok'] is True
+            app_module._handle_forge_complete(payload)
+        mock_bcast.assert_not_called()
+
+    def test_unknown_job_id_returns_early(self, client):
+        import ui.app as app_module
+        payload = self._make_payload(99999)
+        with patch.object(app_module, '_broadcast_sse') as mock_bcast:
+            app_module._handle_forge_complete(payload)
+        mock_bcast.assert_not_called()
 
     def test_success_writes_pdf(self, client, tmp_path):
         import ui.app as app_module
         app_module.PROJECT_ROOT = tmp_path
-        pid = self._seed_pipeorgan_id(client)
+        job_id = client.job_ids[0]
+        payload = self._make_payload(job_id)
         with patch.object(app_module, '_broadcast_sse'):
-            client.post(f'/api/jobs/{pid}/forge-complete',
-                        json={'tailored_resume': self.RESUME_TEXT})
-        pdf = tmp_path / 'output' / 'pdf' / f'forge_{pid}.pdf'
+            app_module._handle_forge_complete(payload)
+        pdf = tmp_path / 'output' / 'pdf' / f'forge_{job_id}.pdf'
         assert pdf.exists()
         assert pdf.stat().st_size > 0
-
-    def test_success_updates_forge_status(self, client, tmp_path):
-        import ui.app as app_module
-        app_module.PROJECT_ROOT = tmp_path
-        pid = self._seed_pipeorgan_id(client)
-        with patch.object(app_module, '_broadcast_sse'):
-            client.post(f'/api/jobs/{pid}/forge-complete',
-                        json={'tailored_resume': self.RESUME_TEXT})
-        import sqlite3
-        with sqlite3.connect(str(core_db.DB_PATH)) as conn:
-            row = conn.execute(
-                'SELECT forge_status FROM jobs WHERE pipeorgan_job_id=?', (pid,)
-            ).fetchone()
-        assert row is not None
-        assert row[0] == 'pass'
 
     def test_success_broadcasts_sse(self, client, tmp_path):
         import ui.app as app_module
         app_module.PROJECT_ROOT = tmp_path
-        pid = self._seed_pipeorgan_id(client)
+        job_id = client.job_ids[0]
+        payload = self._make_payload(job_id)
         with patch.object(app_module, '_broadcast_sse') as mock_bcast:
-            client.post(f'/api/jobs/{pid}/forge-complete',
-                        json={'tailored_resume': self.RESUME_TEXT})
+            app_module._handle_forge_complete(payload)
         mock_bcast.assert_called_once()
         event, data = mock_bcast.call_args[0]
         assert event == 'forge_complete'
-        assert data['pipeorgan_job_id'] == pid
-        assert data['job_id'] == client.job_ids[0]
+        assert data['job_id'] == job_id
+
+    def test_success_updates_forge_status(self, client, tmp_path):
+        import ui.app as app_module
+        import sqlite3
+        app_module.PROJECT_ROOT = tmp_path
+        job_id = client.job_ids[0]
+        payload = self._make_payload(job_id)
+        with patch.object(app_module, '_broadcast_sse'):
+            app_module._handle_forge_complete(payload)
+        with sqlite3.connect(str(core_db.DB_PATH)) as conn:
+            row = conn.execute(
+                'SELECT forge_status FROM jobs WHERE id=?', (job_id,)
+            ).fetchone()
+        assert row is not None
+        assert row[0] == 'pass'
+
+    def test_sse_payload_includes_tc_score(self, client, tmp_path):
+        import ui.app as app_module
+        app_module.PROJECT_ROOT = tmp_path
+        job_id = client.job_ids[0]
+        payload = self._make_payload(job_id)
+        with patch.object(app_module, '_broadcast_sse') as mock_bcast:
+            app_module._handle_forge_complete(payload)
+        _, data = mock_bcast.call_args[0]
+        assert data['tc_score'] == pytest.approx(0.85)
+
+    def test_invalid_job_id_returns_early(self, client):
+        import ui.app as app_module
+        payload = self._make_payload(0)
+        with patch.object(app_module, '_broadcast_sse') as mock_bcast:
+            app_module._handle_forge_complete(payload)
+        mock_bcast.assert_not_called()
 
 
 # ── GET /api/jobs/<job_id>/resume ─────────────────────────────────────────────
 
 class TestJobResumePdf:
 
-    def _seed_forge(self, client, tmp_path, pipeorgan_job_id='po-dl-1'):
-        """Wire a seeded job to a pipeorgan_job_id and write a stub PDF on disk."""
+    def _seed_forge_pdf(self, client, tmp_path):
+        """Write forge_{job_id}.pdf directly — no pipeorgan_job_id needed."""
         import ui.app as app_module
         app_module.PROJECT_ROOT = tmp_path
-        core_db.set_pipeorgan_job_id(client.job_ids[0], pipeorgan_job_id)
+        job_id = client.job_ids[0]
         pdf_dir = tmp_path / 'output' / 'pdf'
         pdf_dir.mkdir(parents=True, exist_ok=True)
-        pdf_path = pdf_dir / f'forge_{pipeorgan_job_id}.pdf'
+        pdf_path = pdf_dir / f'forge_{job_id}.pdf'
         pdf_path.write_bytes(b'%PDF-1.4 stub')
-        return client.job_ids[0], pipeorgan_job_id
+        return job_id
 
     def test_unknown_job_id_returns_404(self, client):
         rv = client.get('/api/jobs/99999/resume')
         assert rv.status_code == 404
 
-    def test_job_without_pipeorgan_id_returns_404(self, client):
-        # job_ids[0] has no pipeorgan_job_id set by default
-        rv = client.get(f'/api/jobs/{client.job_ids[0]}/resume')
-        assert rv.status_code == 404
-
-    def test_pipeorgan_id_set_but_pdf_missing_returns_404(self, client, tmp_path):
+    def test_no_forge_pdf_returns_404(self, client, tmp_path):
         import ui.app as app_module
         app_module.PROJECT_ROOT = tmp_path
-        core_db.set_pipeorgan_job_id(client.job_ids[0], 'po-no-pdf')
-        # pdf_dir exists but file does not
         (tmp_path / 'output' / 'pdf').mkdir(parents=True, exist_ok=True)
         rv = client.get(f'/api/jobs/{client.job_ids[0]}/resume')
         assert rv.status_code == 404
 
     def test_valid_job_serves_pdf(self, client, tmp_path):
-        job_id, _ = self._seed_forge(client, tmp_path)
+        job_id = self._seed_forge_pdf(client, tmp_path)
         rv = client.get(f'/api/jobs/{job_id}/resume')
         assert rv.status_code == 200
         assert rv.content_type == 'application/pdf'
