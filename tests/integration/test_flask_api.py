@@ -832,3 +832,82 @@ class TestJobResumePdf:
         assert rv.status_code == 200
         assert rv.content_type == 'application/pdf'
         assert rv.data == b'%PDF-1.4 stub'
+
+
+class TestHandleForgesFailed:
+    """Tests for _handle_forge_failed() — triggered by suite/jobs/failed MQTT message."""
+
+    def _make_payload(self, job_id, reason='TC scoring failed after 7 runs', service='truecandidate'):
+        return {
+            'job_id': str(job_id),
+            'reason': reason,
+            'service': service,
+            'run_number': 7,
+        }
+
+    def test_unknown_job_id_returns_early(self, client):
+        import ui.app as app_module
+        payload = self._make_payload(99999)
+        with patch.object(app_module, '_broadcast_sse') as mock_bcast:
+            app_module._handle_forge_failed(payload)
+        mock_bcast.assert_not_called()
+
+    def test_invalid_job_id_returns_early(self, client):
+        import ui.app as app_module
+        payload = self._make_payload(0)
+        with patch.object(app_module, '_broadcast_sse') as mock_bcast:
+            app_module._handle_forge_failed(payload)
+        mock_bcast.assert_not_called()
+
+    def test_success_sets_forge_status_fail(self, client):
+        import ui.app as app_module
+        import sqlite3
+        job_id = client.job_ids[0]
+        payload = self._make_payload(job_id)
+        with patch.object(app_module, '_broadcast_sse'):
+            app_module._handle_forge_failed(payload)
+        with sqlite3.connect(str(core_db.DB_PATH)) as conn:
+            row = conn.execute(
+                'SELECT forge_status FROM jobs WHERE id=?', (job_id,)
+            ).fetchone()
+        assert row is not None
+        assert row[0] == 'fail'
+
+    def test_success_broadcasts_forge_failed_sse(self, client):
+        import ui.app as app_module
+        job_id = client.job_ids[0]
+        payload = self._make_payload(job_id)
+        with patch.object(app_module, '_broadcast_sse') as mock_bcast:
+            app_module._handle_forge_failed(payload)
+        mock_bcast.assert_called_once()
+        event, data = mock_bcast.call_args[0]
+        assert event == 'forge_failed'
+        assert data['job_id'] == job_id
+
+    def test_sse_payload_includes_reason(self, client):
+        import ui.app as app_module
+        job_id = client.job_ids[0]
+        payload = self._make_payload(job_id, reason='Resume fraud score too high')
+        with patch.object(app_module, '_broadcast_sse') as mock_bcast:
+            app_module._handle_forge_failed(payload)
+        _, data = mock_bcast.call_args[0]
+        assert data['reason'] == 'Resume fraud score too high'
+        assert data['service'] == 'truecandidate'
+        assert data['run_number'] == 7
+
+    def test_sse_payload_includes_job_metadata(self, client):
+        import ui.app as app_module
+        job_id = client.job_ids[0]
+        payload = self._make_payload(job_id)
+        with patch.object(app_module, '_broadcast_sse') as mock_bcast:
+            app_module._handle_forge_failed(payload)
+        _, data = mock_bcast.call_args[0]
+        assert 'title' in data
+        assert 'company' in data
+
+    def test_missing_job_id_returns_early(self, client):
+        import ui.app as app_module
+        payload = {'reason': 'failed', 'service': 'tc', 'run_number': 0}
+        with patch.object(app_module, '_broadcast_sse') as mock_bcast:
+            app_module._handle_forge_failed(payload)
+        mock_bcast.assert_not_called()
