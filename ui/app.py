@@ -104,13 +104,51 @@ def _handle_forge_complete(payload: dict) -> None:
     _mqtt_log.info('[mqtt] forge_complete SSE broadcast for job %s', job_id)
 
 
+def _handle_forge_failed(payload: dict) -> None:
+    """Handle suite/jobs/failed — update status, broadcast SSE so UI shows failure."""
+    try:
+        job_id = int(payload.get('job_id', 0))
+    except (ValueError, TypeError):
+        _mqtt_log.warning('[mqtt] suite/jobs/failed — invalid payload: %s', payload)
+        return
+
+    if not job_id:
+        _mqtt_log.warning('[mqtt] suite/jobs/failed — missing job_id')
+        return
+
+    from core.database import get_job_detail, set_forge_status_by_job_id
+    job = get_job_detail(job_id)
+    if not job:
+        _mqtt_log.warning('[mqtt] suite/jobs/failed — job %s not found', job_id)
+        return
+
+    reason = payload.get('reason', 'Pipeline failed')
+    service = payload.get('service', 'unknown')
+    run_number = payload.get('run_number', 0)
+
+    set_forge_status_by_job_id(job_id, 'fail')
+
+    _broadcast_sse('forge_failed', {
+        'job_id':     job_id,
+        'title':      job['title'],
+        'company':    job['company'],
+        'reason':     reason,
+        'service':    service,
+        'run_number': run_number,
+    })
+    _mqtt_log.info('[mqtt] forge_failed SSE broadcast for job %s reason=%s', job_id, reason)
+
+
 def _start_mqtt_subscriber() -> None:
-    """Start background MQTT subscriber for suite/jobs/complete."""
+    """Start background MQTT subscriber for suite/jobs/complete and suite/jobs/failed."""
     def on_message(client, userdata, msg):
         try:
             payload = json.loads(msg.payload.decode())
             _mqtt_log.info('[mqtt] received %s', msg.topic)
-            _handle_forge_complete(payload)
+            if msg.topic == 'suite/jobs/complete':
+                _handle_forge_complete(payload)
+            elif msg.topic == 'suite/jobs/failed':
+                _handle_forge_failed(payload)
         except Exception:
             _mqtt_log.exception('[mqtt] failed to handle %s', msg.topic)
 
@@ -120,7 +158,8 @@ def _start_mqtt_subscriber() -> None:
         try:
             client.connect(MQTT_BROKER_HOST, MQTT_BROKER_PORT)
             client.subscribe('suite/jobs/complete')
-            _mqtt_log.info('[mqtt] subscribed to suite/jobs/complete on %s:%s',
+            client.subscribe('suite/jobs/failed')
+            _mqtt_log.info('[mqtt] subscribed to suite/jobs/complete + suite/jobs/failed on %s:%s',
                            MQTT_BROKER_HOST, MQTT_BROKER_PORT)
             client.loop_forever()
         except Exception:
@@ -398,7 +437,10 @@ def submit_to_forge(job_id):
     payload = {
         'job_id':           str(job_id),
         'resume_id':        resume_type,
+        'resume_text':      resume_path.read_text(),
         'jd':               job['description'],
+        'title':            job['title'],
+        'company':          job['company'],
         'score':            job['fit_score'],
         'missing_keywords': missing_keywords,
         'run':              0,
