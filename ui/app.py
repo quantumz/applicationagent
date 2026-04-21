@@ -437,7 +437,10 @@ def submit_to_forge(job_id):
     payload = {
         'job_id':           str(job_id),
         'resume_id':        resume_type,
+        'resume_text':      resume_path.read_text(),
         'jd':               job['description'],
+        'title':            job['title'],
+        'company':          job['company'],
         'score':            job['fit_score'],
         'missing_keywords': missing_keywords,
         'run':              0,

@@ -701,10 +701,25 @@ class TestSubmitToForge:
         payload = json.loads(raw)
         assert payload['job_id'] == str(job_id)
         assert 'resume_id' in payload
+        assert 'resume_text' in payload
         assert 'jd' in payload
+        assert 'title' in payload
+        assert 'company' in payload
         assert 'score' in payload
         assert 'missing_keywords' in payload
         assert payload['run'] == 0
+
+    def test_forward_payload_includes_resume_text(self, client):
+        """resume_text must be in payload so RF can forge without HTTP calls."""
+        job_id = client.job_ids[0]
+        with patch('ui.app.mqtt.Client') as mock_client_cls:
+            mock_mqtt = MagicMock()
+            mock_client_cls.return_value = mock_mqtt
+            client.post(f'/api/forward/{job_id}')
+        raw = mock_mqtt.publish.call_args[0][1]
+        payload = json.loads(raw)
+        assert payload['resume_text']  # non-empty string
+        assert isinstance(payload['resume_text'], str)
 
     def test_forward_mqtt_failure_returns_502(self, client):
         job_id = client.job_ids[0]
