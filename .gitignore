@@ -57,3 +57,4 @@ CLAUDE.md
 # Internal workflow notes — never publish
 CLAUDE.md
 .pytest_cache/
+*.bak\n*.bak.*\nwork/
