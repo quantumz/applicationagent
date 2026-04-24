@@ -58,3 +58,8 @@ CLAUDE.md
 CLAUDE.md
 .pytest_cache/
 *.bak\n*.bak.*\nwork/
+*.bak.*
+*.bak.*
+*.bak.*
+*.bk
+*.bk.*
