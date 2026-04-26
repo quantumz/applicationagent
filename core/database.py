@@ -156,7 +156,7 @@ def get_results(resume_type=None):
         query = '''
             SELECT j.id, j.resume_type, j.source, j.title, j.company,
                    j.location, j.salary, j.url, j.scraped_at, j.search_query,
-                   j.override, j.override_from_score,
+                   j.override, j.override_from_score, j.forge_status,
                    a.decision, a.fit_score, a.quick_checks, a.ai_analysis,
                    (ap.job_id IS NOT NULL) AS applied
             FROM jobs j
@@ -180,6 +180,7 @@ def get_results(resume_type=None):
             'override': bool(row['override']),
             'override_from_score': row['override_from_score'],
             'resume_type': row['resume_type'],
+            'forge_status': row['forge_status'],
             'quick_analysis': json.loads(row['quick_checks'] or '{}'),
             'ai_analysis': json.loads(row['ai_analysis'] or '{}'),
             'job_metadata': {
@@ -466,7 +467,8 @@ def get_job_detail(job_id):
     with get_db() as conn:
         row = conn.execute(
             '''SELECT j.id, j.resume_type, j.title, j.company, j.description,
-                      a.fit_score
+                      j.forge_status,
+                      a.fit_score, a.ai_analysis
                FROM jobs j
                LEFT JOIN analysis a ON a.job_id = j.id
                WHERE j.id = ?''',
@@ -481,6 +483,8 @@ def get_job_detail(job_id):
         'company': row['company'],
         'description': row['description'] or '',
         'fit_score': row['fit_score'] or 0.0,
+        'ai_analysis': row['ai_analysis'] or '{}',
+        'forge_status': row['forge_status'],
     }
 
 

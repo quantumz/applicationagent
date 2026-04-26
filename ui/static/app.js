@@ -223,6 +223,26 @@ function connectSseEvents() {
         btn.replaceWith(link);
     });
 
+    es.addEventListener('forge_failed', (e) => {
+        const payload = JSON.parse(e.data);
+
+        // Close the modal if it's open for this job
+        const modal = document.getElementById('forge-modal');
+        if (modal && modal.dataset.jobId === String(payload.job_id)) {
+            modal.remove();
+        }
+
+        // Replace FORGE button with FAIL marker
+        const btn = document.querySelector(`.forge-btn[data-job-id="${payload.job_id}"]`);
+        if (!btn) return;
+        const span = document.createElement('span');
+        span.className = 'forge-btn fail-link';
+        span.dataset.jobId = String(payload.job_id);
+        span.textContent = '[ FAIL ]';
+        if (payload.reason) span.title = payload.reason;
+        btn.replaceWith(span);
+    });
+
     es.onerror = () => {
         // Reconnect after 5s on connection drop
         es.close();
@@ -344,9 +364,13 @@ function buildResultsTable(results) {
         const considerBtn = showConsider
             ? `<button class="consider-btn" onclick="markConsider(${r.id}, ${score}, this)">Consider</button>`
             : '';
-        const forgeBtn = r.decision === 'STRONG_MATCH'
-            ? `<button class="forge-btn" data-job-id="${r.id}" onclick="openForgeModal(${r.id})">[ FORGE ]</button>`
-            : '';
+        const forgeBtn = r.forge_status === 'pass'
+            ? `<a href="/api/jobs/${r.id}/resume" target="_blank" class="forge-btn pass-link" data-job-id="${r.id}">[ PASS ]</a>`
+            : r.forge_status === 'fail'
+                ? `<span class="forge-btn fail-link" data-job-id="${r.id}">[ FAIL ]</span>`
+                : r.decision === 'STRONG_MATCH'
+                    ? `<button class="forge-btn" data-job-id="${r.id}" onclick="openForgeModal(${r.id})">[ FORGE ]</button>`
+                    : '';
         return `<tr class="${rowClass}" data-search-query="${searchQuery}" data-job-id="${r.id}">
             <td class="applied-cb-cell"><input type="checkbox" class="applied-cb" ${r.applied ? 'checked' : ''} onchange="toggleApplied(${r.id}, this)"></td>
             <td class="${decisionClass}" data-decision-cell>${r.decision}</td>
