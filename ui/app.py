@@ -744,6 +744,7 @@ def job_resume_pdf(job_id):
 def job_detail(job_id):
     """Return everything ResumeForge needs to pre-populate its start screen."""
     from core.database import get_job_detail
+    import json as _json
     job = get_job_detail(job_id)
     if not job:
         abort(404)
@@ -751,13 +752,20 @@ def job_detail(job_id):
     resume_path = PROJECT_ROOT / 'resumes' / resume_type / f'{resume_type}.txt'
     if not resume_path.exists():
         abort(404)
+    try:
+        ai = _json.loads(job.get('ai_analysis') or '{}')
+    except Exception:
+        ai = {}
     return jsonify({
-        'job_id':      job['id'],
-        'title':       job['title'],
-        'company':     job['company'],
-        'description': job['description'],
-        'resume_type': resume_type,
-        'resume_text': resume_path.read_text(),
+        'job_id':           job['id'],
+        'title':            job['title'],
+        'company':          job['company'],
+        'description':      job['description'],
+        'resume_type':      resume_type,
+        'resume_text':      resume_path.read_text(),
+        'fit_score':        job['fit_score'],
+        'missing_keywords': ai.get('missing_keywords', []),
+        'forge_status':     job['forge_status'],
     })
 
 
