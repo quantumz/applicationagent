@@ -53,7 +53,7 @@ def _handle_forge_complete(payload: dict) -> None:
         final_resume = payload.get('final_resume', '').strip()
         tc_score = payload.get('tc_score', 0.0)
     except (ValueError, TypeError):
-        _mqtt_log.warning('[mqtt] suite/jobs/complete — invalid payload: %s', payload)
+        _mqtt_log.warning('[mqtt] suite/jobs/complete — invalid payload (job_id=%r): %s', payload.get('job_id'), payload)
         return
 
     if not job_id or not final_resume:
