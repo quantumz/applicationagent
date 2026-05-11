@@ -182,8 +182,8 @@ header {
 
 .header-right a:hover { color: var(--green); }
 
-.settings-btn { background: none; border: none; color: var(--muted); font-size: 12px; letter-spacing: 1px; cursor: pointer; padding: 0 0 0 16px; font-family: inherit; }
-.settings-btn:hover { color: var(--green); }
+.settings-btn, .locations-btn { background: none; border: none; color: var(--muted); font-size: 12px; letter-spacing: 1px; cursor: pointer; padding: 0 0 0 16px; font-family: inherit; }
+.settings-btn:hover, .locations-btn:hover { color: var(--green); }
 
 .sidebar-toggle {
     background: none;
