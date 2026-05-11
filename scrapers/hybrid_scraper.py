@@ -388,26 +388,49 @@ class HybridScraper(BaseScraper):
 
             page = context.new_page()
 
+            # Load user's state -> [cities] mapping from settings (if any)
+            try:
+                from core.database import get_setting
+                state_metros = get_setting('state_metros', default={}) or {}
+            except Exception as e:
+                print(f"⚠️  Could not load state_metros mapping ({e}); state expansion disabled")
+                state_metros = {}
+
+            from core.locations import expand_state_query
+
             for query in self.search_queries:
                 if len(self.jobs_scraped) >= self.rate_limit['max_jobs_per_run']:
                     print("\nReached global job limit")
                     break
 
-                jobs = self.scrape_search_results(
-                    page,
-                    query['keywords'],
-                    query['location'],
-                    min(query['max_results'], self.rate_limit['max_jobs_per_query'])
-                )
+                # Expand state-only locations into per-metro queries.
+                # Single-city or non-state inputs pass through as [original].
+                # Intra-run URL dedup is handled by self.urls_seen inside
+                # scrape_search_results — no extra plumbing needed here.
+                expanded_locations = expand_state_query(query['location'], state_metros)
+                if len(expanded_locations) > 1:
+                    print(f"\n🌐 State expansion: '{query['location']}' → "
+                          f"{len(expanded_locations)} metros: {expanded_locations}")
 
-                print(f"\n✓ Collected {len(jobs)} jobs from this search")
-                search_query_str = f"{query['keywords']} {query['location']}"
-                for job in jobs:
-                    job['search_query'] = search_query_str
+                for loc in expanded_locations:
+                    if len(self.jobs_scraped) >= self.rate_limit['max_jobs_per_run']:
+                        break
 
-                if len(self.search_queries) > 1:
-                    print("\nWaiting before next search...")
-                    self.human_delay(5, 10)
+                    jobs = self.scrape_search_results(
+                        page,
+                        query['keywords'],
+                        loc,
+                        min(query['max_results'], self.rate_limit['max_jobs_per_query'])
+                    )
+
+                    print(f"\n✓ Collected {len(jobs)} jobs from this search")
+                    search_query_str = f"{query['keywords']} {loc}"
+                    for job in jobs:
+                        job['search_query'] = search_query_str
+
+                    if len(self.search_queries) > 1 or len(expanded_locations) > 1:
+                        print("\nWaiting before next search...")
+                        self.human_delay(5, 10)
 
             print("\n" + "="*60)
             print("Scraping complete.")

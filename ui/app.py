@@ -731,6 +731,44 @@ def settings_save_apikey():
     return jsonify({'status': 'ok', 'port': 8080})
 
 
+@app.route('/api/state-metros', methods=['GET'])
+def state_metros_get():
+    """Return user's state -> [cities] mapping plus US_STATES for the dropdown."""
+    from core.database import get_setting
+    from core.locations import US_STATES
+    mapping = get_setting('state_metros', default={}) or {}
+    return jsonify({
+        'mapping': mapping,
+        'states': [{'code': code, 'name': name} for code, name in US_STATES],
+    })
+
+
+@app.route('/api/state-metros', methods=['PUT'])
+def state_metros_put():
+    """Overwrite the state -> [cities] mapping. Body: {"mapping": {...}}."""
+    from core.database import set_setting
+    from core.locations import _STATE_CODES
+    data = request.get_json() or {}
+    mapping = data.get('mapping')
+    if not isinstance(mapping, dict):
+        return jsonify({'error': 'mapping must be an object'}), 400
+
+    # Validate: keys are 2-letter state codes, values are lists of non-empty strings.
+    cleaned = {}
+    for code, cities in mapping.items():
+        if not isinstance(code, str) or code.upper() not in _STATE_CODES:
+            return jsonify({'error': f'invalid state code: {code}'}), 400
+        if not isinstance(cities, list):
+            return jsonify({'error': f'cities for {code} must be a list'}), 400
+        clean_cities = [c.strip() for c in cities if isinstance(c, str) and c.strip()]
+        if clean_cities:
+            cleaned[code.upper()] = clean_cities
+
+    set_setting('state_metros', cleaned)
+    return jsonify({'status': 'ok', 'mapping': cleaned})
+
+
+
 @app.route('/api/jobs/<int:job_id>/resume')
 def job_resume_pdf(job_id):
     """Serve the forge-generated PDF for a given appagent job ID."""

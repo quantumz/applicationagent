@@ -18,6 +18,7 @@
             </div>
             <div class="header-right">
                 <a href="/docs/getting-started.md" target="_blank">Docs</a>
+                <button class="settings-btn" onclick="openLocationsModal()" title="State → Metro mappings">🌐 Locations</button>
                 <button class="settings-btn" onclick="openSettingsModal()" title="API Key Settings">⚙ Settings</button>
             </div>
         </header>
@@ -318,6 +319,24 @@
                     <button onclick="closeLowScoreModal()">No, go back</button>
                     <button class="btn-danger" onclick="confirmLowScoreApply()">Yes, apply anyway</button>
                 </div>
+            </div>
+        </div>
+
+        <!-- State → Metro Mappings Modal -->
+        <div id="locations-modal" class="modal-overlay hidden">
+            <div class="modal modal-wide">
+                <button class="modal-close" onclick="closeLocationsModal()">×</button>
+                <h2>🌐 State → Metro Mappings</h2>
+                <p class="field-hint">When a search query's location is a state name or 2-letter code (e.g. "Oregon" or "OR"), it's expanded into multiple per-metro searches using your mapping below. States not listed here pass through unchanged.</p>
+                <div id="locations-rows"></div>
+                <div class="modal-actions" style="justify-content:space-between">
+                    <button onclick="addLocationsRow()">+ Add State</button>
+                    <div>
+                        <button onclick="closeLocationsModal()">Cancel</button>
+                        <button onclick="saveLocationsMapping()">Save</button>
+                    </div>
+                </div>
+                <p id="locations-msg" class="field-hint hidden"></p>
             </div>
         </div>
     </div>
