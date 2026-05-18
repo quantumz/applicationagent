@@ -767,3 +767,114 @@ async function submitUpload() {
         showError(`Error: ${e.message}`);
     }
 }
+
+
+// ---------------------------------------------------------------------------
+// Locations modal — State → Metro mappings
+// ---------------------------------------------------------------------------
+
+let _usStates = [];  // cached after first load
+
+async function openLocationsModal() {
+    const modal = document.getElementById('locations-modal');
+    const msgEl = document.getElementById('locations-msg');
+    msgEl.classList.add('hidden');
+    msgEl.textContent = '';
+
+    try {
+        const res = await fetch('/api/state-metros');
+        const data = await res.json();
+        _usStates = data.states || [];
+        const mapping = data.mapping || {};
+
+        const container = document.getElementById('locations-rows');
+        container.innerHTML = '';
+
+        const codes = Object.keys(mapping).sort();
+        if (codes.length === 0) {
+            addLocationsRow();
+        } else {
+            codes.forEach(code => addLocationsRow(code, (mapping[code] || []).join(', ')));
+        }
+    } catch (e) {
+        msgEl.textContent = `Error loading: ${e.message}`;
+        msgEl.classList.remove('hidden');
+    }
+
+    modal.classList.remove('hidden');
+}
+
+function closeLocationsModal() {
+    document.getElementById('locations-modal').classList.add('hidden');
+}
+
+function addLocationsRow(selectedCode = '', citiesValue = '') {
+    const container = document.getElementById('locations-rows');
+    const row = document.createElement('div');
+    row.className = 'detail-query-row';  // reuse existing row styling
+    row.style.marginBottom = '8px';
+
+    const stateOptions = _usStates.map(s =>
+        `<option value="${s.code}" ${s.code === selectedCode ? 'selected' : ''}>${s.name}</option>`
+    ).join('');
+
+    row.innerHTML = `
+        <select class="loc-state" style="min-width:160px">
+            <option value="">-- select state --</option>
+            ${stateOptions}
+        </select>
+        <input type="text" class="loc-cities" value="${escapeHtml(citiesValue)}"
+               placeholder="Portland, Eugene, Salem" style="flex:1">
+        <button onclick="this.parentNode.remove()" title="Remove">×</button>
+    `;
+    container.appendChild(row);
+}
+
+function escapeHtml(s) {
+    return String(s).replace(/[&<>"']/g, c => ({
+        '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'
+    }[c]));
+}
+
+async function saveLocationsMapping() {
+    const msgEl = document.getElementById('locations-msg');
+    msgEl.classList.add('hidden');
+
+    const rows = document.querySelectorAll('#locations-rows .detail-query-row');
+    const mapping = {};
+    const seenStates = new Set();
+
+    for (const row of rows) {
+        const code = row.querySelector('.loc-state').value;
+        const citiesRaw = row.querySelector('.loc-cities').value;
+        if (!code) continue;
+        if (seenStates.has(code)) {
+            msgEl.textContent = `Duplicate state: ${code}. Each state can only appear once.`;
+            msgEl.classList.remove('hidden');
+            return;
+        }
+        seenStates.add(code);
+
+        const cities = citiesRaw.split(',').map(s => s.trim()).filter(Boolean);
+        if (cities.length === 0) continue;  // empty row, skip
+        mapping[code] = cities;
+    }
+
+    try {
+        const res = await fetch('/api/state-metros', {
+            method: 'PUT',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({mapping}),
+        });
+        const data = await res.json();
+        if (!res.ok) {
+            msgEl.textContent = data.error || 'Save failed.';
+            msgEl.classList.remove('hidden');
+            return;
+        }
+        closeLocationsModal();
+    } catch (e) {
+        msgEl.textContent = `Error: ${e.message}`;
+        msgEl.classList.remove('hidden');
+    }
+}

@@ -558,10 +558,38 @@ def set_forge_status_by_job_id(job_id, status):
         )
 
 
-def set_forge_status_by_job_id(job_id, status):
-    """Set forge_status on the job row matching job_id directly."""
+# ---------------------------------------------------------------------------
+# Settings (generic key/value store, JSON values)
+# ---------------------------------------------------------------------------
+
+def get_setting(key, default=None):
+    """Return the parsed JSON value for `key`, or `default` if absent.
+
+    Values are stored as JSON strings in the settings table.
+    """
+    import json as _json
+    with get_db() as conn:
+        row = conn.execute(
+            'SELECT value FROM settings WHERE key = ?', (key,)
+        ).fetchone()
+    if row is None:
+        return default
+    try:
+        return _json.loads(row['value'])
+    except (ValueError, TypeError):
+        return default
+
+
+def set_setting(key, value):
+    """Upsert `key` with `value` (any JSON-serializable Python object)."""
+    import json as _json
+    serialized = _json.dumps(value)
     with get_db() as conn:
         conn.execute(
-            'UPDATE jobs SET forge_status=? WHERE id=?',
-            (status, job_id)
+            '''INSERT INTO settings (key, value, updated_at)
+               VALUES (?, ?, datetime('now'))
+               ON CONFLICT(key) DO UPDATE SET
+                 value=excluded.value,
+                 updated_at=excluded.updated_at''',
+            (key, serialized)
         )
