@@ -675,7 +675,7 @@ function addQueryRow() {
     row.className = 'query-row';
     row.innerHTML = `
         <input type="text" placeholder="Keywords" class="q-keywords" />
-        <input type="text" placeholder="City, State" class="q-location" />
+        <input type="text" placeholder="City, State or State" class="q-location" />
         <select class="q-max">
             <option value="5">5</option>
             <option value="10">10</option>
