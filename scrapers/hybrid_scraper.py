@@ -5,9 +5,10 @@ YOU solve the Cloudflare challenge, then automation takes over
 
 import json
 import os
+import re
 import time
 import random
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 from playwright.sync_api import sync_playwright, TimeoutError as PlaywrightTimeout
 import sys
@@ -15,6 +16,32 @@ import sys
 PROJECT_ROOT = Path(__file__).parent.parent
 
 from scrapers.base import BaseScraper
+
+
+def _parse_posted_date(text):
+    """Extract 'Posted X days ago' / 'Posted today' from a raw text blob.
+
+    Returns YYYY-MM-DD or None. Resolves relative to datetime.now() at call
+    time, so callers get an absolute, sortable date instead of a phrase whose
+    meaning drifts with the calendar.
+    """
+    if not text:
+        return None
+
+    text_lower = text.lower()
+
+    match = re.search(r'posted\s+(\d+)\s+days?\s+ago', text_lower)
+    if match:
+        days = int(match.group(1))
+        return (datetime.now() - timedelta(days=days)).strftime('%Y-%m-%d')
+
+    if re.search(r'posted\s+(today|just now)', text_lower):
+        return datetime.now().strftime('%Y-%m-%d')
+
+    if re.search(r'posted\s+\d+\s+hours?\s+ago', text_lower):
+        return datetime.now().strftime('%Y-%m-%d')
+
+    return None
 
 
 class HybridScraper(BaseScraper):
@@ -114,8 +141,6 @@ class HybridScraper(BaseScraper):
 
     def should_exclude_job(self, title, description):
         """Check if job should be excluded based on keywords"""
-        import re
-
         title_lower = title.lower()
         desc_lower = description.lower()
 
@@ -221,6 +246,36 @@ class HybridScraper(BaseScraper):
                 print(f"    ⚠️  Error extracting location: {e}")
                 location = "Unknown Location"
 
+            # Strip "Posted ..." and other blob noise that bleeds into the
+            # location string. The element ZipRecruiter renders is a wrapper,
+            # not a structured field, so we heuristically split it back down.
+            if location and location != "Unknown Location":
+                location = re.sub(
+                    r'\s*(posted\s+\d+\s+days?\s+ago|posted\s+today'
+                    r'|posted\s+just\s+now|posted\s+\d+\s+hours?\s+ago)',
+                    '', location, flags=re.IGNORECASE
+                ).strip()
+                for sep in ['Quick Apply', 'Full-time', 'Part-time', 'Contract',
+                            'Contractor', 'Remote', '$', 'Medical', 'Dental',
+                            'Life,']:
+                    if sep in location:
+                        candidate = location.split(sep)[0].strip().rstrip(',').strip()
+                        if candidate:
+                            location = candidate
+                            break
+
+            # Posted date — scan elements for "Posted X days ago" pattern.
+            posted_date = None
+            try:
+                for elem in all_elements[:60]:
+                    text = elem.inner_text().strip()
+                    if text and 'posted' in text.lower():
+                        posted_date = _parse_posted_date(text)
+                        if posted_date:
+                            break
+            except Exception:
+                posted_date = None
+
             # Salary
             try:
                 salary = None
@@ -261,6 +316,7 @@ class HybridScraper(BaseScraper):
                 'location': location,
                 'salary': salary,
                 'description': description,
+                'posted_date': posted_date,
                 'scraped_at': datetime.now().isoformat()
             }
 

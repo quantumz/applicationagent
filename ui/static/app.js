@@ -371,6 +371,8 @@ function buildResultsTable(results) {
                 : r.decision === 'STRONG_MATCH'
                     ? `<button class="forge-btn" data-job-id="${r.id}" onclick="openForgeModal(${r.id})">[ FORGE ]</button>`
                     : '';
+        const postedClass = job.posted_date ? 'posted-date' : 'posted-date posted-unknown';
+        const postedText = job.posted_date || '—';
         return `<tr class="${rowClass}" data-search-query="${searchQuery}" data-job-id="${r.id}">
             <td class="applied-cb-cell"><input type="checkbox" class="applied-cb" ${r.applied ? 'checked' : ''} onchange="toggleApplied(${r.id}, this)"></td>
             <td class="${decisionClass}" data-decision-cell>${r.decision}</td>
@@ -379,6 +381,7 @@ function buildResultsTable(results) {
             <td>${companyDisplay}</td>
             <td>${job.location || ''}</td>
             <td>${job.salary || ''}</td>
+            <td class="${postedClass}">${postedText}</td>
             <td>${ai.ats_pass_likelihood || ''}</td>
             <td>${reasoning}</td>
             <td class="consider-cell">${considerBtn}${forgeBtn}</td>
@@ -396,6 +399,7 @@ function buildResultsTable(results) {
                 <th>Company</th>
                 <th>Location</th>
                 <th>Salary</th>
+                <th>Posted</th>
                 <th>ATS</th>
                 <th>Reasoning</th>
                 <th></th>

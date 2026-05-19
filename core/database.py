@@ -32,6 +32,7 @@ def init_db():
                 company     TEXT NOT NULL,
                 location    TEXT,
                 salary      TEXT,
+                posted_date TEXT DEFAULT NULL,
                 url         TEXT NOT NULL DEFAULT '',
                 description TEXT,
                 scraped_at  TEXT,
@@ -92,19 +93,21 @@ def init_db():
             conn.execute('ALTER TABLE jobs ADD COLUMN pipeorgan_job_id TEXT DEFAULT NULL')
         if 'forge_status' not in existing_cols:
             conn.execute('ALTER TABLE jobs ADD COLUMN forge_status TEXT DEFAULT NULL')
+        if 'posted_date' not in existing_cols:
+            conn.execute('ALTER TABLE jobs ADD COLUMN posted_date TEXT DEFAULT NULL')
 
 
 def upsert_job(resume_type, source, title, company, location, salary, url,
-               description, scraped_at, search_query=''):
+               description, scraped_at, search_query='', posted_date=None):
     """Insert job, return its ID. On conflict returns the existing row's ID."""
     url = url or ''
     with get_db() as conn:
         try:
             cur = conn.execute(
                 '''INSERT INTO jobs
-                   (resume_type, source, title, company, location, salary, url, description, scraped_at, search_query)
-                   VALUES (?,?,?,?,?,?,?,?,?,?)''',
-                (resume_type, source, title, company, location, salary, url, description, scraped_at, search_query or '')
+                   (resume_type, source, title, company, location, salary, url, description, scraped_at, search_query, posted_date)
+                   VALUES (?,?,?,?,?,?,?,?,?,?,?)''',
+                (resume_type, source, title, company, location, salary, url, description, scraped_at, search_query or '', posted_date)
             )
             return cur.lastrowid
         except sqlite3.IntegrityError:
@@ -157,6 +160,7 @@ def get_results(resume_type=None):
             SELECT j.id, j.resume_type, j.source, j.title, j.company,
                    j.location, j.salary, j.url, j.scraped_at, j.search_query,
                    j.override, j.override_from_score, j.forge_status,
+                   j.posted_date,
                    a.decision, a.fit_score, a.quick_checks, a.ai_analysis,
                    (ap.job_id IS NOT NULL) AS applied
             FROM jobs j
@@ -191,6 +195,7 @@ def get_results(resume_type=None):
                 'url': row['url'] or '',
                 'scraped_at': row['scraped_at'] or '',
                 'search_query': row['search_query'] or '',
+                'posted_date': row['posted_date'],
             }
         })
     return results

@@ -244,6 +244,7 @@ def analyze_batch(jobs_file, resume_path, output_dir=None):
             description=job['description'],
             scraped_at=job.get('scraped_at', ''),
             search_query=job.get('search_query', ''),
+            posted_date=job.get('posted_date'),
         )
         if job_id:
             upsert_analysis(

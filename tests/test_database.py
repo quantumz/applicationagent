@@ -57,6 +57,19 @@ class TestUpsertJob:
         id2 = db.upsert_job(**self._job(url=None))
         assert id1 == id2
 
+    def test_posted_date_defaults_to_none(self, test_db):
+        """Existing call sites (manual entry, legacy import) omit posted_date."""
+        job_id = db.upsert_job(**self._job())
+        with db.get_db() as conn:
+            row = conn.execute('SELECT posted_date FROM jobs WHERE id=?', (job_id,)).fetchone()
+        assert row['posted_date'] is None
+
+    def test_posted_date_stored_when_provided(self, test_db):
+        job_id = db.upsert_job(**self._job(posted_date='2026-04-25'))
+        with db.get_db() as conn:
+            row = conn.execute('SELECT posted_date FROM jobs WHERE id=?', (job_id,)).fetchone()
+        assert row['posted_date'] == '2026-04-25'
+
 
 # ── upsert_analysis ───────────────────────────────────────────────────────────
 
@@ -147,6 +160,23 @@ class TestGetResults:
         self._add_job_with_analysis('test_resume', 'https://example.com/1', 'SRE', 'Corp', 'APPLY', 0.6)
         results = db.get_results()
         assert results[0]['applied'] is False
+
+    def test_posted_date_in_job_metadata(self, test_db):
+        job_id = db.upsert_job(
+            resume_type='test_resume', source='hybrid_scraper',
+            title='SRE', company='Corp', location='Remote', salary=None,
+            url='https://example.com/p1', description='desc',
+            scraped_at='2026-01-01', posted_date='2026-04-25',
+        )
+        db.upsert_analysis(job_id=job_id, decision='APPLY', fit_score=0.7,
+                           quick_checks={}, ai_analysis={})
+        results = db.get_results()
+        assert results[0]['job_metadata']['posted_date'] == '2026-04-25'
+
+    def test_posted_date_null_in_job_metadata_when_unset(self, test_db):
+        self._add_job_with_analysis('test_resume', 'https://example.com/p2', 'SRE', 'Corp', 'APPLY', 0.6)
+        results = db.get_results()
+        assert results[0]['job_metadata']['posted_date'] is None
 
 
 # ── delete_job ────────────────────────────────────────────────────────────────
