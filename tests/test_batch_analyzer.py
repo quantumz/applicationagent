@@ -354,6 +354,43 @@ class TestAnalyzeBatch:
         call_kwargs = mock_upsert_job.call_args
         assert call_kwargs.kwargs['title'] == 'Senior SRE'
         assert call_kwargs.kwargs['company'] == 'TechCorp'
+        # posted_date kwarg always forwarded — None when source omits it
+        assert call_kwargs.kwargs['posted_date'] is None
+
+    @patch('scripts.batch_analyzer.generate_pdf_report')
+    @patch('scripts.batch_analyzer.upsert_analysis')
+    @patch('scripts.batch_analyzer.upsert_job', return_value=2)
+    @patch('scripts.batch_analyzer.analyze_job_fit')
+    @patch('scripts.batch_analyzer.init_db')
+    def test_analyze_batch_forwards_posted_date(
+        self, mock_init, mock_analyze, mock_upsert_job, mock_upsert_analysis,
+        mock_pdf, tmp_path
+    ):
+        """When the scraper recorded a posted_date, it must reach upsert_job."""
+        mock_analyze.return_value = self._mock_ai_result()
+        mock_pdf.return_value = str(tmp_path / 'report.pdf')
+
+        data = {
+            'resume_type': 'test_resume',
+            'scraped_at': '2026-03-09T10:00:00',
+            'jobs': [{
+                'id': 'job-002',
+                'title': 'SRE',
+                'company': 'Acme',
+                'location': 'Remote',
+                'salary': None,
+                'url': 'https://example.com/job-002',
+                'description': 'Build things.',
+                'scraped_at': '2026-03-09T10:00:00',
+                'posted_date': '2026-04-25',
+            }],
+        }
+        jobs_file = tmp_path / 'jobs.json'
+        jobs_file.write_text(json.dumps(data))
+        resume_file = self._make_resume(tmp_path)
+
+        analyze_batch(str(jobs_file), resume_file)
+        assert mock_upsert_job.call_args.kwargs['posted_date'] == '2026-04-25'
 
     @patch('scripts.batch_analyzer.generate_pdf_report')
     @patch('scripts.batch_analyzer.upsert_analysis')
